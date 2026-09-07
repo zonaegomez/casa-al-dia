@@ -7,6 +7,13 @@ tiempo real, sin depender de una cuenta de Claude.
 Es un solo archivo (`index.html`) sin backend propio: todo corre en el navegador y
 se conecta directo a Firebase.
 
+## 🚀 Ya está en vivo
+
+- Sitio: https://casa-al-dia-three.vercel.app
+- Código: https://github.com/zonaegomez/casa-al-dia
+- Cada vez que se sube un `index.html` nuevo al repo, Vercel vuelve a desplegar
+  automáticamente en 1–2 minutos.
+
 ## ✅ Firebase ya está configurado
 
 Ya entré a tu proyecto de Firebase (**Casa al dia**, ID `casa-al-dia-ceb5a`) y dejé
@@ -24,26 +31,17 @@ todo listo:
 No necesitas tocar nada de Firebase. Los pasos que faltan son solo para publicar
 el sitio.
 
-## 1. Subir el código a GitHub
+## Cómo se hizo (referencia)
 
-Esto lo hago yo directamente si me compartes un token de acceso personal (PAT)
-de GitHub con permisos mínimos (idealmente solo para un repositorio vacío que
-tú crees de antemano, o permiso de "Contents" en un repo nuevo). Con eso creo
-el repositorio (si no existe) y subo estos archivos (`index.html`,
-`firestore.rules`, este `README.md`).
+1. Se subió el código a GitHub (`zonaegomez/casa-al-dia`, rama `main`) usando
+   la función de "Upload files" de GitHub (no `git push`, porque esta sesión
+   no tenía permiso de push directo al repo).
+2. Se importó el repo en Vercel (Import Git Repository → sin framework, sin
+   build command) y se desplegó.
 
-## 2. Desplegar en Vercel
-
-Una vez que el código esté en GitHub:
-
-1. Entra a https://vercel.com/new
-2. Elige "Import Git Repository" y selecciona el repositorio recién creado.
-3. Vercel detecta que es un sitio estático (no hay que configurar nada de
-   "Build Command" ni "Output Directory" — puedes dejarlos en blanco/default).
-4. Clic en **Deploy**.
-
-Cada vez que se suba un cambio nuevo a la rama principal del repositorio,
-Vercel vuelve a desplegar automáticamente.
+Para futuras actualizaciones del código, basta con subir un `index.html`
+nuevo a la rama `main` del repo (por la web de GitHub o con `git push` si ya
+tienes acceso) — Vercel vuelve a desplegar solo.
 
 ## Notas
 
@@ -61,3 +59,12 @@ Vercel vuelve a desplegar automáticamente.
   sirve igual de bien.
 - Puedes revisar o ajustar la configuración de Firebase en cualquier momento
   desde https://console.firebase.google.com/project/casa-al-dia-ceb5a
+- Hubo un problema detectado y corregido: al abrir la app en dos pestañas/dispositivos
+  casi al mismo tiempo, cada una podía "sembrar" sus propios datos de arranque
+  (miembro inicial, despensa, etc.), duplicándolos. Ya se corrigió con un candado
+  atómico en Firestore (un campo `seeded` en `settings/config`) para que la siembra
+  inicial ocurra una sola vez sin importar cuántos dispositivos abran la app a la vez.
+  Los duplicados que ya existían en tu base de datos (dos "Erick", varios artículos de
+  despensa repetidos) siguen ahí — bórralos manualmente desde la app o desde
+  https://console.firebase.google.com/project/casa-al-dia-ceb5a/firestore si quieres
+  limpiarlos.
