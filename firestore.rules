@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Reglas de seguridad para "Casa al Día".
+// Usamos Firebase Authentication anónima: cualquier persona que abra la app
+// obtiene una sesión anónima automática, y estas reglas exigen que exista
+// una sesión (auth != null) para leer o escribir cualquier dato.
+//
+// Esto significa: cualquiera con el enlace de la app puede leer y escribir
+// los datos de la casa (no hay contraseñas ni roles). Es un nivel de
+// seguridad básico pensado para un uso familiar/privado del enlace, no para
+// un enlace publicado abiertamente. Si más adelante quieres restringirlo a
+// personas específicas, se puede migrar a Authentication con email/contraseña
+// y reglas basadas en una lista de UIDs autorizados.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Documento único de configuración de la casa (nombre, moneda, presupuestos, etc.)
+    match /settings/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Miembros de la casa (perfiles)
+    match /members/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Inventario: despensa, limpieza, higiene, insumos
+    match /items/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Movimientos de inventario (consumos y compras)
+    match /movements/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Servicios recurrentes (luz, agua, gas, internet, etc.)
+    match /bills/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Recordatorios
+    match /reminders/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Cualquier otra colección futura: denegado por defecto
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
