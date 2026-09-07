@@ -13,48 +13,48 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg:#F8F3E6; --surface:#FFFFFF; --surface-2:#F1E9D4; --border:#E2D6B4;
-    --ink:#1E2A1F; --ink-soft:#5A6350; --ink-faint:#8C9280;
-    --accent:#0B6B5B; --accent-ink:#FFFFFF; --accent-soft:#DBEEE6; --accent-strong:#074E42;
-    --accent2:#C4703D; --accent2-ink:#FFFFFF; --accent2-soft:#F5E2CE; --accent2-strong:#98531F;
-    --good:#2E7D4F; --good-soft:#E1F1E5;
-    --warn:#BD7A19; --warn-soft:#F8EAD2;
-    --bad:#AE3529; --bad-soft:#F8E1DE;
-    --shadow-sm:0 1px 2px rgba(28,36,24,.06);
-    --shadow-md:0 10px 26px -12px rgba(28,36,24,.22);
-    --shadow-lg:0 26px 60px -18px rgba(28,36,24,.30);
+    --bg:#F3F5FB; --surface:#FFFFFF; --surface-2:#EEF1F9; --border:#E1E5F2;
+    --ink:#181D33; --ink-soft:#666D85; --ink-faint:#9AA0B5;
+    --accent:#3E6DF6; --accent-ink:#FFFFFF; --accent-soft:#E8EEFE; --accent-strong:#2A4FCC;
+    --accent2:#EC4899; --accent2-ink:#FFFFFF; --accent2-soft:#FCE7F3; --accent2-strong:#BE185D;
+    --good:#22C55E; --good-soft:#E7F9EE;
+    --warn:#F59E0B; --warn-soft:#FEF3DC;
+    --bad:#EF4444; --bad-soft:#FDE8E8;
+    --shadow-sm:0 1px 2px rgba(24,29,51,.06);
+    --shadow-md:0 10px 26px -12px rgba(24,29,51,.20);
+    --shadow-lg:0 26px 60px -18px rgba(24,29,51,.28);
     --radius:16px; --radius-sm:11px;
-    --glow-1:rgba(11,107,91,.10); --glow-2:rgba(196,112,61,.10);
+    --glow-1:rgba(62,109,246,.10); --glow-2:rgba(236,72,153,.08);
     --grain-op:.05;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#0F1310; --surface:#171D16; --surface-2:#1E251B; --border:#2C3427;
-      --ink:#ECEEE3; --ink-soft:#A9B19B; --ink-faint:#767C6B;
-      --accent:#3ECEB3; --accent-ink:#07211C; --accent-soft:#17342E; --accent-strong:#68E1C9;
-      --accent2:#E8935C; --accent2-ink:#2B1707; --accent2-soft:#3A2416; --accent2-strong:#F2AF80;
-      --good:#6ED89B; --good-soft:#173523;
-      --warn:#EFBF63; --warn-soft:#332711;
-      --bad:#F1958A; --bad-soft:#3A1D1A;
+      --bg:#0E1220; --surface:#161B2E; --surface-2:#1D233A; --border:#2B3350;
+      --ink:#E7EAF5; --ink-soft:#A0A8C0; --ink-faint:#6B7290;
+      --accent:#6E8FFF; --accent-ink:#0B1230; --accent-soft:#1C2A52; --accent-strong:#A7BBFF;
+      --accent2:#F472B6; --accent2-ink:#3A0A22; --accent2-soft:#3A1830; --accent2-strong:#FBA5D0;
+      --good:#4ADE80; --good-soft:#12301F;
+      --warn:#FBBF24; --warn-soft:#332411;
+      --bad:#F87171; --bad-soft:#3A1616;
       --shadow-sm:0 1px 2px rgba(0,0,0,.35);
       --shadow-md:0 12px 28px -10px rgba(0,0,0,.5);
       --shadow-lg:0 28px 60px -18px rgba(0,0,0,.6);
-      --glow-1:rgba(62,206,179,.09); --glow-2:rgba(232,147,92,.07);
+      --glow-1:rgba(110,143,255,.12); --glow-2:rgba(244,114,182,.08);
       --grain-op:.07;
     }
   }
   :root[data-theme="dark"]{
-    --bg:#0F1310; --surface:#171D16; --surface-2:#1E251B; --border:#2C3427;
-    --ink:#ECEEE3; --ink-soft:#A9B19B; --ink-faint:#767C6B;
-    --accent:#3ECEB3; --accent-ink:#07211C; --accent-soft:#17342E; --accent-strong:#68E1C9;
-    --accent2:#E8935C; --accent2-ink:#2B1707; --accent2-soft:#3A2416; --accent2-strong:#F2AF80;
-    --good:#6ED89B; --good-soft:#173523;
-    --warn:#EFBF63; --warn-soft:#332711;
-    --bad:#F1958A; --bad-soft:#3A1D1A;
+    --bg:#0E1220; --surface:#161B2E; --surface-2:#1D233A; --border:#2B3350;
+    --ink:#E7EAF5; --ink-soft:#A0A8C0; --ink-faint:#6B7290;
+    --accent:#6E8FFF; --accent-ink:#0B1230; --accent-soft:#1C2A52; --accent-strong:#A7BBFF;
+    --accent2:#F472B6; --accent2-ink:#3A0A22; --accent2-soft:#3A1830; --accent2-strong:#FBA5D0;
+    --good:#4ADE80; --good-soft:#12301F;
+    --warn:#FBBF24; --warn-soft:#332411;
+    --bad:#F87171; --bad-soft:#3A1616;
     --shadow-sm:0 1px 2px rgba(0,0,0,.35);
     --shadow-md:0 12px 28px -10px rgba(0,0,0,.5);
     --shadow-lg:0 28px 60px -18px rgba(0,0,0,.6);
-    --glow-1:rgba(62,206,179,.09); --glow-2:rgba(232,147,92,.07);
+    --glow-1:rgba(110,143,255,.12); --glow-2:rgba(244,114,182,.08);
     --grain-op:.07;
   }
 
@@ -254,6 +254,17 @@
   .list-sub{font-size:11.5px; color:var(--ink-faint);}
   .list-end{text-align:right; flex:none;}
 
+  .member-row{display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); transition:background .12s ease;}
+  .member-row:last-child{border-bottom:none;}
+  .member-row:hover{background:var(--surface-2);}
+  .member-row .avatar{width:34px; height:34px; font-size:14px;}
+  .member-row-main{min-width:0; flex:1;}
+  .member-row-name{font-weight:700; font-size:13.5px; font-family:'Fraunces',serif;}
+  .member-row-stats{display:flex; gap:12px; margin-top:3px;}
+  .member-row-stats span{display:inline-flex; align-items:center; gap:4px; font-size:11.5px; color:var(--ink-faint); font-weight:600;}
+  .member-row-stats svg{width:13px; height:13px;}
+  .member-row-amount{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14px; color:var(--accent-strong); flex:none;}
+
   .tabs{display:flex; gap:4px; background:var(--surface-2); padding:4px; border-radius:var(--radius-sm); width:fit-content;}
   .tab{padding:7px 14px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer; color:var(--ink-soft); transition:all .15s ease;}
   .tab.active{background:var(--surface); color:var(--accent-strong); box-shadow:var(--shadow-sm);}
@@ -375,18 +386,18 @@ const firebaseConfig = {
 
 /* ---------------- constants ---------------- */
 const CATS = {
-  despensa: {label:'Despensa', color:'#0B6B5B', icon:'basket'},
-  limpieza: {label:'Limpieza', color:'#2E6FA3', icon:'spray'},
-  higiene:  {label:'Higiene personal', color:'#8659B3', icon:'drop'},
-  insumos:  {label:'Insumos', color:'#C4703D', icon:'box'},
-  servicio: {label:'Servicios', color:'#AE3529', icon:'bolt'},
-  otro:     {label:'Otros gastos', color:'#6B7259', icon:'dots'}
+  despensa: {label:'Despensa', color:'#3E6DF6', icon:'basket'},
+  limpieza: {label:'Limpieza', color:'#0EA5B7', icon:'spray'},
+  higiene:  {label:'Higiene personal', color:'#8B5CF6', icon:'drop'},
+  insumos:  {label:'Insumos', color:'#F59E0B', icon:'box'},
+  servicio: {label:'Servicios', color:'#EC4899', icon:'bolt'},
+  otro:     {label:'Otros gastos', color:'#6B7280', icon:'dots'}
 };
 const INVENTORY_CATS = ['despensa','limpieza','higiene','insumos'];
 const UNITS = ['pza','kg','g','L','ml','paquete','rollo','bolsa','caja'];
 const BILL_SUBTYPES = ['Luz (CFE)','Agua','Gas LP / Natural','Internet','Telefonía','Streaming','Predial','Mantenimiento','Otro'];
 const CYCLE_MONTHS = {mensual:1, bimestral:2, trimestral:3, anual:12};
-const MEMBER_COLORS = ['#0B6B5B','#C4703D','#8659B3','#2E6FA3','#AE3529','#6B7259','#1F8A70','#B5652E'];
+const MEMBER_COLORS = ['#3E6DF6','#EC4899','#8B5CF6','#0EA5B7','#F59E0B','#22C55E','#EF4444','#F97316'];
 const LOCAL_KEY = 'casa_al_dia_local_v1';
 const MEMBER_KEY = 'casa_al_dia_member_id';
 
@@ -756,7 +767,7 @@ function renderSidebar(){
       </div>
     </div>
     <button class="member-switch" onclick="App.openMemberSwitch()">
-      ${m ? `<span class="avatar" style="background:${m.color||'#0B6B5B'}">${initials(m.name)}</span>`
+      ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>`
           : `<span class="avatar" style="background:var(--ink-faint)">?</span>`}
       <span>
         <div class="label">Registrando como</div>
@@ -871,15 +882,24 @@ function pageDashboard(){
         </div>
       </div>
       <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">${icon('users')} Miembros — este ciclo</div>
+          <button class="btn btn-ghost btn-sm" onclick="App.go('config')">Ver todos ${icon('chevRight')}</button>
+        </div>
+        <div class="panel-body pad0">
+          ${renderTopMembers()}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="panel">
         <div class="panel-header"><div class="panel-title">${icon('chart')} Gasto por categoría (este ciclo)</div></div>
         <div class="panel-body pad0">
           ${stats.total>0 ? `<div class="chart-wrap"><canvas id="chartCat"></canvas></div>` :
             emptyBlock('cash', 'Aún no hay compras registradas en este ciclo. En cuanto registres una, aquí verás el desglose.')}
         </div>
       </div>
-    </div>
-
-    <div class="grid-2" style="margin-top:14px;">
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">${icon('warn')} Alertas</div>
@@ -888,14 +908,15 @@ function pageDashboard(){
           ${renderAlertsList(low, dueSoon)}
         </div>
       </div>
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">${icon('cash')} Últimos movimientos</div>
-          <button class="btn btn-ghost btn-sm" onclick="App.go('gastos')">Ver todo ${icon('chevRight')}</button>
-        </div>
-        <div class="panel-body pad0">
-          ${renderRecentMovements()}
-        </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px;">
+      <div class="panel-header">
+        <div class="panel-title">${icon('cash')} Últimos movimientos</div>
+        <button class="btn btn-ghost btn-sm" onclick="App.go('gastos')">Ver todo ${icon('chevRight')}</button>
+      </div>
+      <div class="panel-body pad0">
+        ${renderRecentMovements()}
       </div>
     </div>
   `;
@@ -928,13 +949,62 @@ function renderAlertsList(low, dueSoon){
 function renderRecentMovements(){
   const rows = allExpenseRows().slice(0,8);
   if(!rows.length) return emptyBlock('cash', 'Cuando registres compras o pagos de servicios aparecerán aquí.');
-  return rows.map(r=>`<div class="list-item">
-    <div class="list-icon" style="background:${(CATS[r.category]||{}).color?hexSoft((CATS[r.category]||{}).color):'var(--surface-2)'}; color:${(CATS[r.category]||{}).color||'var(--ink-soft)'}">${icon((CATS[r.category]||{}).icon||'dots')}</div>
-    <div class="list-main"><div class="list-title">${esc(r.name)}</div><div class="list-sub">${fmtDate(r.date)} · ${esc(r.memberName||'—')}</div></div>
-    <div class="list-end"><div class="num">${fmtMoney(r.amount)}</div></div>
-  </div>`).join('');
+  return `<div class="table-scroll"><table>
+    <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Miembro</th><th style="text-align:right">Monto</th></tr></thead>
+    <tbody>
+    ${rows.map(r=>{
+      const cat = CATS[r.category] || {label:cap(r.category||'otro'), color:'var(--ink-faint)', icon:'dots'};
+      return `<tr>
+        <td class="row-sub">${fmtDate(r.date)}</td>
+        <td class="row-title">${icon(cat.icon)} ${esc(r.name)}</td>
+        <td><span class="badge" style="background:${hexSoft(cat.color)}; color:${cat.color}"><span class="dot" style="background:${cat.color}"></span>${esc(cat.label)}</span></td>
+        <td class="row-sub">${esc(r.memberName||'—')}</td>
+        <td class="num">${fmtMoney(r.amount)}</td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
 }
-function hexSoft(hex){ return hex + '22'; }
+function hexSoft(hex){ return hex && hex.startsWith('#') ? hex + '22' : 'var(--surface-2)'; }
+
+/* ---------------- members ranking (dashboard) ---------------- */
+function topMembersThisCycle(limit){
+  const cycle = cycleKeyFor(todayISO());
+  const stats = {};
+  state.members.forEach(m=>{ stats[m.id] = {member:m, gasto:0, compras:0, consumos:0}; });
+  state.movements.forEach(mv=>{
+    if(cycleKeyFor(mv.date) !== cycle) return;
+    const s = stats[mv.memberId]; if(!s) return;
+    if(mv.type==='compra'){ s.gasto += Number(mv.total)||0; s.compras++; }
+    else if(mv.type==='consumo'){ s.consumos++; }
+  });
+  state.bills.forEach(b=>{
+    (b.history||[]).forEach(h=>{
+      if(cycleKeyFor(h.paidAt) !== cycle) return;
+      const s = stats[h.memberId]; if(!s) return;
+      s.gasto += Number(h.amount)||0;
+    });
+  });
+  return Object.values(stats).sort((a,b)=>b.gasto-a.gasto).slice(0, limit||4);
+}
+function renderTopMembers(){
+  if(!state.members.length) return emptyBlock('users', 'Agrega miembros de la casa en Ajustes para ver su actividad aquí.');
+  const top = topMembersThisCycle(4);
+  return top.map(s=>{
+    const m = s.member;
+    return `<div class="member-row">
+      <span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>
+      <div class="member-row-main">
+        <div class="member-row-name">${esc(m.name)}</div>
+        <div class="member-row-stats">
+          <span>${icon('cash')} ${s.compras}</span>
+          <span>${icon('basket')} ${s.consumos}</span>
+        </div>
+      </div>
+      <div class="member-row-amount">${fmtMoney(s.gasto)}</div>
+    </div>`;
+  }).join('');
+}
 
 /* ---------------- expense aggregation ---------------- */
 function allExpenseRows(){
@@ -984,7 +1054,7 @@ function drawCharts(){
     state.charts.trend = new Chart(trendCanvas, {
       type:'bar',
       data:{ labels: keys.map(k=>cap(cycleLabel(k).split(' de ')[0])),
-        datasets:[{ data, backgroundColor:'#0B6B5B', borderRadius:6, maxBarThickness:34 }] },
+        datasets:[{ data, backgroundColor:'#3E6DF6', borderRadius:6, maxBarThickness:34 }] },
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtMoney(c.parsed.y)}}},
         scales:{ x:{grid:{display:false}, ticks:{color:textColor}},
