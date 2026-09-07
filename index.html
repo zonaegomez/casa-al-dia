@@ -512,14 +512,13 @@ function boot(){
 
 function ensureSeed(){
   if(state.members.length || state.items.length || state.bills.length) return;
-  seedStarter();
+  seedStarterLocal();
 }
 
 function subscribeAll(){
   const db = state.db;
   db.collection('members').onSnapshot(snap=>{
     state.members = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
-    if(state.members.length===0) seedStarter();
     render();
   }, ()=>{});
   db.collection('items').onSnapshot(snap=>{
@@ -540,61 +539,73 @@ function subscribeAll(){
   }, ()=>{});
   db.doc('settings/config').onSnapshot(snap=>{
     if(snap.exists){ state.settings = Object.assign({}, state.settings, snap.data()); }
-    else { seedStarter(); }
     render();
   }, ()=>{});
+
+  // Seed starter data at most once per household, guarded by an atomic
+  // transaction on a "seeded" flag in settings/config. This makes seeding
+  // safe even if several tabs/devices load the app at the same instant:
+  // only the transaction that wins gets to write the starter member,
+  // items and bills, so duplicates can no longer be created.
+  trySeedOnceLive();
 }
 
-function seedStarter(){
-  if(state.dbMode==='live'){
-    const db = state.db;
-    db.doc('settings/config').set({
-      householdName:'Mi Casa', currency:'MXN', monthlyBudget:0,
-      budgetByCategory:{despensa:0,servicio:0,limpieza:0,higiene:0,insumos:0},
-      cycleStartDay:1
-    }).catch(()=>{});
-  } else {
-    state.settings = {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0,
-      budgetByCategory:{despensa:0,servicio:0,limpieza:0,higiene:0,insumos:0}, cycleStartDay:1};
-  }
-  const starterItems = [
-    ['Arroz','despensa','kg',2], ['Frijol','despensa','kg',2], ['Aceite','despensa','L',1],
-    ['Azúcar','despensa','kg',1], ['Café','despensa','paquete',1], ['Huevo','despensa','pza',12],
-    ['Papel higiénico','higiene','rollo',6], ['Jabón de baño','higiene','pza',2], ['Pasta dental','higiene','pza',1],
-    ['Shampoo','higiene','pza',1],
-    ['Detergente para ropa','limpieza','paquete',1], ['Jabón para trastes','limpieza','pza',1],
-    ['Cloro','limpieza','L',1], ['Papel de cocina','limpieza','rollo',2],
-    ['Bolsas de basura','insumos','paquete',1], ['Focos','insumos','pza',2], ['Pilas','insumos','paquete',1]
-  ];
-  const starterBills = [
-    ['CFE (luz)','Luz (CFE)','bimestral',0], ['Agua','Agua','bimestral',0],
-    ['Gas LP','Gas LP / Natural','mensual',0], ['Internet','Internet','mensual',0]
-  ];
-  const starterMemberName = (window.__casaOwnerName || 'Erick');
+const STARTER_ITEMS = [
+  ['Arroz','despensa','kg',2], ['Frijol','despensa','kg',2], ['Aceite','despensa','L',1],
+  ['Azúcar','despensa','kg',1], ['Café','despensa','paquete',1], ['Huevo','despensa','pza',12],
+  ['Papel higiénico','higiene','rollo',6], ['Jabón de baño','higiene','pza',2], ['Pasta dental','higiene','pza',1],
+  ['Shampoo','higiene','pza',1],
+  ['Detergente para ropa','limpieza','paquete',1], ['Jabón para trastes','limpieza','pza',1],
+  ['Cloro','limpieza','L',1], ['Papel de cocina','limpieza','rollo',2],
+  ['Bolsas de basura','insumos','paquete',1], ['Focos','insumos','pza',2], ['Pilas','insumos','paquete',1]
+];
+const STARTER_BILLS = [
+  ['CFE (luz)','Luz (CFE)','bimestral',0], ['Agua','Agua','bimestral',0],
+  ['Gas LP','Gas LP / Natural','mensual',0], ['Internet','Internet','mensual',0]
+];
+const STARTER_SETTINGS_DEFAULTS = {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0,
+  budgetByCategory:{despensa:0,servicio:0,limpieza:0,higiene:0,insumos:0}, cycleStartDay:1};
 
-  if(state.dbMode==='live'){
-    const db = state.db;
-    db.collection('members').add({name:starterMemberName, color:MEMBER_COLORS[0]}).then(ref=>{
-      if(!state.memberId){ state.memberId = ref.id; localStorage.setItem(MEMBER_KEY, ref.id); render(); }
-    }).catch(()=>{});
-    starterItems.forEach(([name,category,unit])=>{
-      db.collection('items').add({name, category, unit, currentQty:0, minQty:0, updatedAt:todayISO()}).catch(()=>{});
-    });
-    starterBills.forEach(([name,subtype,cycle,amountEstimate])=>{
-      db.collection('bills').add({name, subtype, cycle, amountEstimate, nextDueDate: todayISO(), history:[]}).catch(()=>{});
-    });
-  } else {
-    const memberId = uid();
-    state.members.push({id:memberId, name:starterMemberName, color:MEMBER_COLORS[0]});
-    if(!state.memberId){ state.memberId = memberId; localStorage.setItem(MEMBER_KEY, memberId); }
-    starterItems.forEach(([name,category,unit])=>{
-      state.items.push({id:uid(), name, category, unit, currentQty:0, minQty:0, updatedAt:todayISO()});
-    });
-    starterBills.forEach(([name,subtype,cycle,amountEstimate])=>{
-      state.bills.push({id:uid(), name, subtype, cycle, amountEstimate, nextDueDate: todayISO(), history:[]});
-    });
-    saveLocalSnapshot();
-  }
+function trySeedOnceLive(){
+  const db = state.db;
+  const ref = db.doc('settings/config');
+  db.runTransaction(tx => tx.get(ref).then(snap=>{
+    if(snap.exists && snap.data() && snap.data().seeded) return false;
+    const merged = Object.assign({}, STARTER_SETTINGS_DEFAULTS, snap.exists ? snap.data() : {}, {seeded:true});
+    tx.set(ref, merged);
+    return true;
+  })).then(shouldSeed=>{
+    if(shouldSeed) seedStarterDataLive();
+  }).catch(()=>{});
+}
+
+function seedStarterDataLive(){
+  const db = state.db;
+  const starterMemberName = (window.__casaOwnerName || 'Erick');
+  db.collection('members').add({name:starterMemberName, color:MEMBER_COLORS[0]}).then(ref=>{
+    if(!state.memberId){ state.memberId = ref.id; localStorage.setItem(MEMBER_KEY, ref.id); render(); }
+  }).catch(()=>{});
+  STARTER_ITEMS.forEach(([name,category,unit])=>{
+    db.collection('items').add({name, category, unit, currentQty:0, minQty:0, updatedAt:todayISO()}).catch(()=>{});
+  });
+  STARTER_BILLS.forEach(([name,subtype,cycle,amountEstimate])=>{
+    db.collection('bills').add({name, subtype, cycle, amountEstimate, nextDueDate: todayISO(), history:[]}).catch(()=>{});
+  });
+}
+
+function seedStarterLocal(){
+  state.settings = Object.assign({}, STARTER_SETTINGS_DEFAULTS);
+  const starterMemberName = (window.__casaOwnerName || 'Erick');
+  const memberId = uid();
+  state.members.push({id:memberId, name:starterMemberName, color:MEMBER_COLORS[0]});
+  if(!state.memberId){ state.memberId = memberId; localStorage.setItem(MEMBER_KEY, memberId); }
+  STARTER_ITEMS.forEach(([name,category,unit])=>{
+    state.items.push({id:uid(), name, category, unit, currentQty:0, minQty:0, updatedAt:todayISO()});
+  });
+  STARTER_BILLS.forEach(([name,subtype,cycle,amountEstimate])=>{
+    state.bills.push({id:uid(), name, subtype, cycle, amountEstimate, nextDueDate: todayISO(), history:[]});
+  });
+  saveLocalSnapshot();
 }
 
 /* ---------------- render shell ---------------- */
