@@ -8,6 +8,11 @@
 // (Vercel → tu proyecto → Settings → Environment Variables). La key nunca
 // se expone al navegador: solo vive en este archivo, que corre en el
 // servidor de Vercel.
+//
+// Si tu API key NO está asociada a un workspace específico (algunas keys de
+// organización requieren esto), agrega también:
+//   ANTHROPIC_WORKSPACE_ID = el ID del workspace (Anthropic Console → Settings → Workspaces)
+// Si no lo necesitas, simplemente no la configures.
 
 const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'; // rápido y económico, ideal para leer tickets
 
@@ -46,13 +51,17 @@ Reglas:
 - Si la foto no es legible o no logras identificar productos con confianza, responde {"lines":[],"total":0}.`;
 
   try {
+    const headers = {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    };
+    if (process.env.ANTHROPIC_WORKSPACE_ID) {
+      headers['anthropic-workspace-id'] = process.env.ANTHROPIC_WORKSPACE_ID;
+    }
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
+      headers,
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
         max_tokens: 1200,
