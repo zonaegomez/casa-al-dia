@@ -367,6 +367,7 @@
 <nav class="mobile-nav" id="mobileNav"></nav>
 <div id="modalRoot"></div>
 <div class="toast-wrap" id="toastWrap"></div>
+<input type="file" id="ticketPhotoInput" accept="image/*" capture="environment" hidden onchange="App.handleTicketPhoto(event)">
 
 <script>
 /* ============================================================
@@ -894,6 +895,7 @@ function pageDashboard(){
       </div>
       <div class="topbar-actions">
         <button class="btn" onclick="App.openMovement('consumo')">${icon('basket')} Registrar consumo</button>
+        <button class="btn" onclick="App.openTicketScan()">${icon('cart')} Escanear ticket</button>
         <button class="btn" onclick="App.openTicket()">${icon('cart')} Ticket de compra</button>
         <button class="btn btn-primary" onclick="App.openMovement('compra')">${icon('plus')} Registrar compra</button>
       </div>
@@ -1018,6 +1020,27 @@ function renderRecentMovements(){
   </table></div>`;
 }
 function hexSoft(hex){ return hex && hex.startsWith('#') ? hex + '22' : 'var(--surface-2)'; }
+function normalizeMatchText(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+function findBestItemMatch(name, items){
+  const n = normalizeMatchText(name);
+  if(!n) return null;
+  let best = null, bestScore = 0;
+  (items||[]).forEach(it=>{
+    const din = normalizeMatchText(it.name);
+    if(!din) return;
+    let score = 0;
+    if(n===din) score = 100;
+    else if(n.includes(din) || din.includes(n)) score = 60;
+    else {
+      const wordsA = new Set(n.split(/\s+/));
+      let overlap = 0;
+      din.split(/\s+/).forEach(w=>{ if(w.length>2 && wordsA.has(w)) overlap++; });
+      score = overlap*20;
+    }
+    if(score>bestScore){ bestScore = score; best = it; }
+  });
+  return bestScore>=20 ? best : null;
+}
 
 /* ---------------- members ranking (dashboard) ---------------- */
 function topMembersThisCycle(limit){
@@ -1715,23 +1738,43 @@ function modalMovement(type, itemId){
 let ticketRowSeq = 0;
 function ticketRowHtml(items, itemId){
   const rowId = 'tkrow'+(ticketRowSeq++);
-  return `<div class="ticket-row" id="${rowId}" style="display:flex; align-items:flex-end; gap:8px; margin-bottom:8px;">
-    <div class="field" style="flex:2; margin:0;"><label>Artículo</label><select class="tkItem">${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}</select></div>
-    <div class="field" style="flex:1; margin:0;"><label>Cantidad</label><input class="tkQty" type="number" step="any" min="0" value="1" oninput="App.updateTicketTotal()"></div>
-    <div class="field" style="flex:1; margin:0;"><label>Costo (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="0" oninput="App.updateTicketTotal()"></div>
-    <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
+  const isFree = !itemId || itemId==='__free__';
+  const freeCats = INVENTORY_CATS.concat(['servicio','otro']);
+  return `<div class="ticket-row" id="${rowId}" style="display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
+    <div style="display:flex; align-items:flex-end; gap:8px;">
+      <div class="field" style="flex:2; margin:0;"><label>Artículo</label>
+        <select class="tkItem" onchange="App.onTicketItemChange('${rowId}')">
+          <option value="__free__" ${isFree?'selected':''}>— Otro / no vincular a inventario —</option>
+          ${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" style="flex:1; margin:0;"><label>Cantidad</label><input class="tkQty" type="number" step="any" min="0" value="1" oninput="App.updateTicketTotal()"></div>
+      <div class="field" style="flex:1; margin:0;"><label>Costo (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="${cost!=null?cost:0}" oninput="App.updateTicketTotal()"></div>
+      <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
+    </div>
+    <div class="tkFreeFields" style="display:${isFree?'flex':'none'}; gap:8px;">
+      <div class="field" style="flex:2; margin:0;"><label>Nombre (no vinculado a inventario)</label><input class="tkFreeName" value="${esc(freeName||'')}" placeholder="Ej. Jitomate a granel"></div>
+      <div class="field" style="flex:1; margin:0;"><label>Categoría</label><select class="tkFreeCat">${freeCats.map(c=>`<option value="${c}" ${c==='despensa'?'selected':''}>${CATS[c]?CATS[c].label:cap(c)}</option>`).join('')}</select></div>
+    </div>
   </div>`;
 }
-function modalTicket(prefillItemIds){
-  if(!state.items.length){ toast('Primero agrega un artículo'); return; }
+function modalTicket(prefillItemIds, scannedLines){
+  if(!state.items.length && !(scannedLines && scannedLines.length)){ toast('Primero agrega un artículo'); return; }
   ticketRowSeq = 0;
   const items = state.items.slice().sort((a,b)=>a.name.localeCompare(b.name));
-  const ids = (prefillItemIds && prefillItemIds.length) ? prefillItemIds : [items[0].id];
+  let rowsHtml;
+  if(scannedLines && scannedLines.length){
+    rowsHtml = scannedLines.map(l=> ticketRowHtml(items, l.itemId || '__free__', l.itemId ? null : l.name, l.price)).join('');
+  } else {
+    const ids = (prefillItemIds && prefillItemIds.length) ? prefillItemIds : [items[0].id];
+    rowsHtml = ids.map(id=>ticketRowHtml(items, id, null, null)).join('');
+  }
   openModal(`
     <div class="modal-header"><h3>Ticket de compra</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
+      ${scannedLines && scannedLines.length ? `<div class="page-sub" style="margin:-4px 0 2px;">Esto es lo que detectamos en la foto — revisa cada línea antes de guardar, sobre todo los precios.</div>` : ''}
       <div class="field"><label>Fecha del ticket</label><input id="tkDate" type="date" value="${todayISO()}"></div>
-      <div id="ticketRows">${ids.map(id=>ticketRowHtml(items, id)).join('')}</div>
+      <div id="ticketRows">${rowsHtml}</div>
       <button class="btn btn-sm" style="margin-top:6px;" onclick="App.addTicketRow()">${icon('plus')} Agregar línea</button>
       <div style="display:flex; justify-content:flex-end; align-items:baseline; gap:8px; margin-top:14px; font-weight:700; font-size:16px;">Total del ticket <span id="tkTotal">${fmtMoney(0)}</span></div>
     </div>
@@ -1899,8 +1942,8 @@ window.App = {
   },
   addTicketRow(){
     const items = state.items.slice().sort((a,b)=>a.name.localeCompare(b.name));
-    if(!items.length) return;
-    document.getElementById('ticketRows').insertAdjacentHTML('beforeend', ticketRowHtml(items, items[0].id));
+    const itemId = items.length ? items[0].id : '__free__';
+    document.getElementById('ticketRows').insertAdjacentHTML('beforeend', ticketRowHtml(items, itemId, null, null));
     App.updateTicketTotal();
   },
   removeTicketRow(rowId){
@@ -1909,6 +1952,13 @@ window.App = {
     const el = document.getElementById(rowId);
     if(el) el.remove();
     App.updateTicketTotal();
+  },
+  onTicketItemChange(rowId){
+    const row = document.getElementById(rowId);
+    if(!row) return;
+    const sel = row.querySelector('.tkItem');
+    const freeFields = row.querySelector('.tkFreeFields');
+    if(freeFields) freeFields.style.display = sel.value==='__free__' ? 'flex' : 'none';
   },
   updateTicketTotal(){
     let total = 0;
@@ -1925,6 +1975,19 @@ window.App = {
       const itemId = row.querySelector('.tkItem').value;
       const qty = Number(row.querySelector('.tkQty').value)||0;
       const cost = Number(row.querySelector('.tkCost').value)||0;
+      if(itemId==='__free__'){
+        const nameEl = row.querySelector('.tkFreeName');
+        const catEl = row.querySelector('.tkFreeCat');
+        const name = nameEl ? nameEl.value.trim() : '';
+        const cat = catEl ? catEl.value : 'otro';
+        if(!name || (!qty && !cost)) continue;
+        await Data.add('movements', {
+          itemId:null, itemName:name, category:cat, type:'compra', qty: qty||1, unitCost: qty?cost/qty:cost,
+          total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra'
+        });
+        count++;
+        continue;
+      }
       const item = state.items.find(i=>i.id===itemId);
       if(!item || (!qty && !cost)) continue;
       const newQty = Number(item.currentQty||0) + qty;
@@ -1938,6 +2001,64 @@ window.App = {
     closeModal();
     if(count) toast(count+' línea(s) del ticket registradas'); else toast('No se registró ninguna línea');
     render();
+  },
+
+  openTicketScan(){
+    const el = document.getElementById('ticketPhotoInput');
+    if(el) el.click();
+  },
+  handleTicketPhoto(event){
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if(!file) return;
+    App.scanTicketPhoto(file);
+  },
+  async scanTicketPhoto(file){
+    if(file.size > 8*1024*1024){ toast('La foto es muy pesada (máx. 8MB)'); return; }
+    openModal(`
+      <div class="modal-header"><h3>Leyendo el ticket…</h3></div>
+      <div class="modal-body" style="text-align:center; padding:34px 0;">
+        <div class="page-sub">Un momento, estamos leyendo los conceptos y precios de la foto…</div>
+      </div>
+    `);
+    try{
+      const dataUrl = await new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = ()=>resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const base64 = String(dataUrl).split(',')[1] || '';
+      const mediaType = file.type || 'image/jpeg';
+      const res = await fetch('/api/parse-ticket', {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify({imageBase64: base64, mediaType})
+      });
+      let payload = {};
+      try{ payload = await res.json(); }catch(e){}
+      if(!res.ok){
+        closeModal();
+        toast(payload && payload.error ? payload.error : 'No se pudo leer el ticket (¿ya configuraste el backend?)');
+        return;
+      }
+      const lines = Array.isArray(payload.lines) ? payload.lines : [];
+      closeModal();
+      if(!lines.length){
+        toast('No se detectó ningún producto en la foto. Intenta con más luz o de más cerca.');
+        return;
+      }
+      const items = state.items.slice();
+      const scannedLines = lines.map(l=>{
+        const match = findBestItemMatch(l.name, items);
+        return { itemId: match?match.id:null, name: l.name, price: Number(l.price)||0 };
+      });
+      modalTicket(null, scannedLines);
+      toast(scannedLines.length+' producto(s) detectados — revísalos antes de guardar');
+    }catch(e){
+      closeModal();
+      toast('No se pudo leer la foto del ticket');
+    }
   },
 
   shareShoppingList(){
