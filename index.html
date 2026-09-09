@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Casa al Día</title>
+<link rel="manifest" href="data:application/manifest+json;base64,eyJuYW1lIjogIkNhc2EgYWwgRFx1MDBlZGEiLCAic2hvcnRfbmFtZSI6ICJDYXNhIGFsIERcdTAwZWRhIiwgInN0YXJ0X3VybCI6ICIuIiwgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsICJiYWNrZ3JvdW5kX2NvbG9yIjogIiNGM0Y1RkIiLCAidGhlbWVfY29sb3IiOiAiIzNFNkRGNiIsICJpY29ucyI6IFt7InNyYyI6ICJkYXRhOmltYWdlL3BuZztiYXNlNjQsaVZCT1J3MEtHZ29BQUFBTlNVaEVVZ0FBQU1BQUFBREFDQVlBQUFCUzNHd0hBQUFFbjBsRVFWUjRuTzNkUzNMVFFBQkZVVG5GaEN3S1ZnU0xJU3NpaTRJaERFZ29ZL3pScDF2ZHJYZk9tSW9WZUZkdE95RTVUWjM1OU9YSHI5YlhRRDJ2TDgrbjF0ZHdydW5GR0R2VDFEYUszUi9ZNkxsbjd4aDJlekREWjRtOVFxaitJSWJQRnJWRHFQYkJEWitTYW9WUS9JTWFQaldWRHVHcDVBY3pmbW9ydmJFaU5SaytMWlE0RFRhZkFNWlBLeVcydHlrQTQ2ZTFyUnRjSFlEeDA0c3RXMXdWZ1BIVG03V2JYQnlBOGRPck5kdGNGSUR4MDd1bEc1MGRnUEV6aWlWYm5SV0E4VE9hdVp0OUdJRHhNNm81MnkzNnJSQXdtcnNCdVBzenVrY2J2aG1BOFhNVTk3YnNLUkRScmdiZzdzL1IzTnEwRTRCby93WGc3czlSWGR1MkU0Qm8vd1RnN3MvUlhXN2NDVUMwdndHNCs1UGlmT3RPQUtKOWFIMEJLYjUvKzdqb3ozLysrclBTbFhEdU5FMmUvdFN3ZFBDUENLSzgxNWZua3hPZ29OS2p2L1d4eFZDT0FBcW9PZng3anllRTdRU3d3ZDdEdi9YNFFsaFBBQ3UwSHY0bElheDM4Z0o0bWQ3R2Ywa0V5L2c2d0FLOWozK2F4cmpHbmpnQlppZzFxcmwzNTcwZkw1a0FIdGd5eGxJRDdPRWFqa29BZDZ3ZFhxM1I5WFk5UnlDQUc5YU1iYStoOVh4dG94SEFGYU44Mzg0bzE5a3o3d0p0MUhKVUJyMmRFK0RDM0x0cWIrTWI5YnBiY3dLY0dYbEVlNy9GZWhRQ2VEUHkrTitKWURrQkxORHorTitOY0kwOUVjQ1VlVWRNL0p5dkVjQk1JOTFaUjdyVzF1SURtSE1uSEhGUWM2N1pLU0FBd2tVSGNOUzcvenVud0dQUkFZdzg3bExTL3c1OEpmak50VHZoVWNaeCtia2Q1Zk1xd2Y4SmZuTStpaU0rTFRENjY1d0FSSXQrRFFBQ0lKb0FpQ1lBb2dtQWFBSWdtZ0NJSmdDaUNZQm9BaUNhQUlnbUFLSUpnR2dDSUpvQWlDWUFvZ21BYUFJZ21nQ0lKZ0NpQ1lCb0FpQ2FBSWpXN1EvR091SVBwMHJXNncvbWNnSVFUUUJFRXdEUkJFQTBBUkJOQUVRVEFORUVRRFFCRUUwQVJCTUEwYnIrSFdHdHZ4K285aS9PcS9ueGUvcWxmNzErSDlBME9RRUlKd0NpQ1lCb0FpQ2FBSWdtQUtJSmdHZ0NJSm9BaUNZQW9nbUFhQUlnbWdDSUpnQ2lDWUJvQWlDYUFJZ21BS0lKZ0dnQ0lKb0FpQ1lBb25VZFFNOC9Ub041ZXY4MzdEb0FxRTBBUkJNQTBRUkFOQUVRVFFCRUV3RFJCRUEwQVJCTkFFUVRBTkVFUURRQkVFMEFSQk1BMFFSQU5BRVFUUUJFRXdEUkJFQTBBUkJOQUVUclBvRGVmNndHdDQzd2I5ZDlBRkNUQUloMit2VGx4Ni9XRi9ISTkyOGZXMThDSzNnS0JKMFRBTkVFUURRQkVFMEFSQk1BMFFSQU5BRVFiWWd2aEVFdFRnQ2lDWUJvQWlDYUFJZ21BS0k5dmI0OG4xcGZCTFR3K3ZKOGNnSVFUUUJFRXdEUkJFQzBwMm42ODJLZzlZWEFudDQzN3dRZ21nQ0k5amNBVDROSWNiNTFKd0RSL2duQUtjRFJYVzdjQ1VDMC93SndDbkJVMTdidEJDRGExUUNjQWh6TnJVMDdBWWgyTXdDbkFFZHhiOHQzVHdBUk1McEhHL1lVaUdnUEEzQUtNS281MjUxMUFvaUEwY3pkN095blFDSmdGRXUydXVnMWdBam8zZEtOTG40UkxBSjZ0V2FicTk0RkVnRzlXYnZKMVcrRGlvQmViTm5pcHE4RGlJRFd0bTV3OHhmQ1JFQXJKYlpYZEx4KzJ3eDdLSG5UTGZxdEVFNERhaXU5c1dxRGRScFFVcTJiYS9VN3RoRFlvdmF6aXQyZXNnaUJKZlo2T3IzN2MzWWhjTS9lcnlPYnZtZ1ZBOVBVOXMyVDd0NjFFY1d4OWZaTzRXOFRCbksycjBQeXBRQUFBQUJKUlU1RXJrSmdnZz09IiwgInNpemVzIjogIjE5MngxOTIiLCAidHlwZSI6ICJpbWFnZS9wbmcifSwgeyJzcmMiOiAiZGF0YTppbWFnZS9wbmc7YmFzZTY0LGlWQk9SdzBLR2dvQUFBQU5TVWhFVWdBQUFnQUFBQUlBQ0FZQUFBRDBlTlQ2QUFBTzNrbEVRVlI0bk8zZFFaYlRTQnFGVVdVZEpyQW9ja1hrWW1CRnNDaHlTQTlvVnpuQlRsdXlGUEZIdkh1SGZmcFUyeExINzNQSVJUOHRsUFQ1eTg5ZnZWOER3QjUrZlB2MDFQczE4RGMzcFJNREQvQ2JRT2pEUlcvQTJBT3NJd3FPNXdJZndPQUQ3RXNRN004RjNZSEJCMmhMRUR6T0Jkekk2QVBVSUFhMmNkRldNUG9BdFltQis3bFFOeGg5Z0RHSmdmZTVPRmNZZm9BNUNJSExYSlF6Umg5Z2JtTGdQeTdFWXZnQjBnaUI4QUF3L0FEWmtrTWc4bzBiZmdET0pZWkExQnMyL0FDOEp5a0VJdDZvNFFkZ2pZUVErS2YzQ3ppYThRZGdyWVR0bUxad0VtNGVBTWViOVRSZ3VqZGwrQUU0d213aE1OVWpBT01Qd0ZGbTI1Z3BhbWEybXdKQWJUT2NCZ3gvQW1EOEFXaHRodTBaT2dCbXVBRUFqR24wRFJyeUNHUDBpdzdBWEVaOEpERGNDWUR4QjZDYUViZHBxQUFZOFFJRGtHRzBqUnJpeUdLMGl3cEF0aEVlQ1pRL0FURCtBSXhtaE8wcUhRQWpYRUFBdUtUNmhwVU5nT29YRGdCdXFieGxKUU9nOGdVRGdEV3FibHE1QUtoNm9RQmdxNHJiVmlvQUtsNGdBTmhEdFkwckV3RFZMZ3dBN0szUzFwVUlnRW9YQkFDT1ZHWHp1Z2RBbFFzQkFLMVUyTDZ1QVZEaEFnQkFENzAzc0ZzQTlIN2pBTkJienkzc0VnREdId0IrNjdXSnpRUEErQVBBV3oyMnNXa0FHSDhBdUt6MVJqWUxBT01QQU85cnVaVk5Bc0Q0QThCOVdtMW05NzhIQUFCbzcvQUE4TzBmQU5acHNaMkhCb0R4QjRCdGp0N1F3d0xBK0FQQVk0N2NVcjhCQUlCQWh3U0FiLzhBc0krak5uWDNBREQrQUxDdkk3WjExd0F3L2dCd2pMMDMxbThBQUNEUWJnSGcyejhBSEd2UHJkMGxBSXcvQUxTeDErWjZCQUFBZ1I0T0FOLytBYUN0UGJiWENRQUFCSG9vQUh6N0I0QStIdDNnelFGZy9BR2dyMGUyMkNNQUFBaTBLUUI4K3dlQUdyWnVzaE1BQUFpME9nQjgrd2VBV3Jac3N4TUFBQWkwS2dCOCt3ZUFtdFp1dEJNQUFBaDBkd0Q0OWc4QXRhM1phaWNBQUJEb3JnRHc3UjhBeG5Edlpqc0JBSUJBQWdBQUF0ME1BTWYvQURDV2U3YmJDUUFBQkhvM0FIejdCNEF4M2Rwd0p3QUFFRWdBQUVDZ3F3SGcrQjhBeHZiZWxqc0JBSUJBQWdBQUFsME1BTWYvQURDSGE1dnVCQUFBQWdrQUFBajA5T2QvNFBnZnh2Zjk2OGRkLzNuUEw2Kzcvdk9BOW41OCsvUm04ei8wZWlIQVkvWWUrYTMvVytJQXhpUUFZQkF0QjMrTlAxK1hJSUF4Q0FBb3F1cmczeUlJWUF4dm5nZDQvZzk5alRyNjl4SUQwTmY1N3dDY0FFQm5zNC8rdWZQM0tnYWdMd0VBSFNTTi9qVmlBUG9TQU5DUTRiL3NkRjJFQUxUejc3TUF6Ly9oR0VaL0d6RUF4emo5RHNBSkFCekU4RC9HcVFBY1N3REF6Z3ovdm9RQUhFTUF3RTRNLzdHRUFPekwveGtRN01ENHQrTmF3ejZlbHNVUEFHRXJZOVNYMHdEWTVzZTNUMDhlQWNBR2hyOEdqd1ZnTzQ4QVlDWGpYNDk3QXVzNUFZQTdHWm5hbkFiQU9rNEE0QTdHZnh6dUZkeEhBTUFOQm1VODdobmM1aEVBWEdGRXh1YVJBTHpQQ1FCY1lQem40VjdDWlUvK0RnQjR5MkRNeVVrQXZPVUVBTTRZLzNtNXQvQ1dFd0JZNWgySFI3LzF1aTR3THdGQXZCbEdydldndVdZd1BnRkF0QkdIck9wd3VaWXdGZ0ZBckpFR2E3U2hjbTJoUGdGQXBCRUdhcFpoY3EyaEpnRkFuT3FETk9zWXVlNVFpd0FnU3RVUlNoc2Y5d0g2RXdERXFEZzY2WVBqbmtBL0FvQUkxWWJHeUx6bC9rQjcvaVpBYU15NC9NMDFnZmFjQURDOUt0OHVqZHg5M0M5b1F3QXd0UXBqWWtpMmNlL2dXQjRCTUMwRE1yWUsxNjdDbnlFNGlnQmdTaFUrdUNzTTJPZ3FYTU1LZjViZ0NCOTZ2d0NZVFlYUm1zbnBlaHBpMkpjVEFLYlRjeWlNLzNGNlhsdnh3WXdFQUZNeC9uTVRBYkFmQWNBMGpIOEdFUUQ3OEJzQWVJRGg3OFB2QXVCeFRnQ1lRbzhoTVA3OTliZ0hvb05aQ0FDR1oveXppUURZUmdEQVNzYS9IdmNFMWhNQURLMzFOekZEVTFmcmUrTVVnTkVKQUFBSUpBQVlsbS8vL01rcEFOeFBBREFrNDg4MUlnRHVJd0RnQnVNL0h2Y01iaE1BREtmbE55NURNcTZXOTg0cEFDTVNBQUFRU0FBd0ZOLytXY01wQUZ3bkFPQUM0ejhQOXhJdUV3QU1vOVUzTElNeG4xYjMxQ2tBSXhFQUFCQklBTUFaMy83bjVkN0NXd0tBSVRoYVpSVCtyRElLQVFELzV4dmkvTnhqK0k4QW9Md1czNmdNUTQ0Vzk5b3BBQ01RQUFBUVNBQVF6N2YvUE80NUxNdUgzaThBYmpsOVdEdFdwVHBod1VpZVBuLzUrYXYzaTRDMTlvb0JIOWpaOXZoejVNOFFvM0lDd0pET1AzU2RETkNENFdkMEFvRGhpUUZhTWZyTXhDTUFwblJQQ1Bnd1oxbHUvMW54NTRSWk9RRmdTazRGZUlUUko0RVRBS0tjWXNBSFBPZjh1U0NSQUFDQVFQNGlJQUFJSkFBQUlKQUFBSUJBQWdBQUFna0FBQWdrQUFBZ2tBQUFnRUFDQUFBQ0NRQUFDQ1FBQUNDUUFBQ0FRQUlBQUFJSkFBQUlKQUFBSUpBQUFJQkFBZ0FBQWdrQUFBZ2tBQUFna0FBQWdFQUNBQUFDQ1FBQUNDUUFBQ0NRQUFDQVFBSUFBQUlKQUFBSUpBQUFJSkFBQUlCQUFnQUFBZ2tBQUFna0FBQWdrQUFBZ0VBQ0FBQUNDUUFBQ0NRQUFDQ1FBQUNBUUFJQUFBSUpBQUFJSkFBQUlKQUFBSUJBQWdBQUFna0FBQWdrQUFBZ2tBQUFnRUFDQUFBQ0NRQUFDQ1FBQUNDUUFBQ0FRQUlBQUFJSkFBQUlKQUFBSUpBQUFJQkFBZ0FBQWdrQUFBZ2tBQUFna0FBQWdFQUNBQUFDQ1FBQUNDUUFBQ0NRQUFDQVFBSUFBQUlKQUFBSUpBQUFJSkFBQUlCQUFnQUFBbjNvL1FLNDdQdlhqNzFmQXNBdW5sOWVlNzhFTG5BQ0FBQ0JCQUFBQkJJQUFCQklBQUJBSUFFQUFJRUVBQUFFRWdBQUVFZ0FBRUFnQVFBQWdRUUFBQVFTQUVYNXF6T0JHZmdzcTBzQUFFQWdBUUFBZ1FRQUFBUVNBQUFRU0FBQVFDQUJBQUNCQkFBQUJCSUFBQkJJQUFCQUlBRUFBSUVFQUFBRUVnQUFFRWdBQUVBZ0FRQUFnUVFBQUFRU0FBQVFTQUFBUUNBQkFBQ0JQdlIrQWRERDg4dnJ6Zi9POTY4Zkc3eVN0aExmZCtKN2huczRBU2pzbmc4dWdLcDhodFVtQUFBZ2tBQUFnRUFDQUFBQ0NRQUFDQ1FBQUNDUUFBQ0FRQUlBQUFJSkFBQUlKQUFBSUpBQUFJQkFBZ0FBQWdrQUFBZ2tBQUFna0FBQWdFQUNBQUFDQ1FBQUNDUUFBQ0NRQUFDQVFBSUFBQUlKQUFBSUpBQ0tlMzU1N2YwU0FGYnoyVldmQUFDQVFBSUFBQUlKQUFBSUpBQUFJSkFBQUlCQUFnQUFBZ2tBQUFna0FBQWdrQUFBZ0VBQ0FBQUNDUUFBQ0NRQUFDQ1FBQUNBUUFJQUFBSUpBQUFJSkFBQUlKQUFBSUJBQWdBQUFna0FBQWdrQUFidy9QTGEreVVBM00xbjFoZ0VBQUFFRWdBQUVFZ0FBRUFnQVFBQWdRUUFBQVFTQUFBUVNBQUFRQ0FCQUFDQkJBQUFCQklBQUJCSUFBQkFJQUVBQUlFRUFBQUVFZ0FBRUVnQUFFQWdBUUFBZ1FRQUFBUVNBQUFRU0FBQVFDQUJNSWpubDlmZUx3SGdKcDlWNHhBQUFCQklBQUJBSUFFQUFJRUVBQUFFRWdBQUVFZ0FBRUFnQVFBQWdRUUFBQVFTQUFBUVNBQUFRQ0FCQUFDQkJBQUFCQklBQUJCSUFBQkFJQUVBQUlFRUFBQUVFZ0FBRUVnQUFFQWdBUUFBZ1FRQUFBUVNBQU41Zm5udC9SSUFydklaTlJZQkFBQ0JCQUFBQkJJQUFCQklBQUJBSUFFQUFJRUVBQUFFRWdBQUVFZ0FBRUFnQVFBQWdRUUFBQVFTQUFBUVNBQUFRQ0FCQUFDQkJBQUFCQklBQUJCSUFBQkFJQUVBQUlFRUFBQUVFZ0FBRUVnQURPYjU1YlgzU3dENGk4K204UWdBQUFna0FBQWdrQUFBZ0VBQ0FBQUNDUUFBQ0NRQUFDQ1FBQUNBUUFJQUFBSUpBQUFJSkFBQUlKQUFBSUJBQWdBQUFna0FBQWdrQUFBZ2tBQUFnRUFDQUFBQ0NRQUFDQ1FBQUNDUUFBQ0FRQUlBQUFJSmdBRTl2N3oyZmdrQS8vS1pOQ1lCQUFDQkJBQUFCQklBQUJCSUFBQkFvS2ZQWDM3KzZ2MGlXTy83MTQrOVh3TEFzaXgrQkRncUp3QUFFRWdBQUVBZ0FRQUFnUVFBQUFRU0FBQVFTQUFBUUNBQkFBQ0JCQUFBQkJJQUFCQklBQUJBSUFFQUFJRUVBQUFFRWdBQUVFZ0FBRUFnQVRBby8vZWJRQVUraThZbEFBQWdrQUFBZ0VBQ0FBQUNDUUFBQ0NRQUFDQ1FBQUNBUUFJQUFBSUpBQUFJSkFBQUlKQUFBSUJBVDUrLy9QelYrMFVBQUcwNUFRQ0FRQUlBQUFJSkFBQUlKQUFBSUpBQUFJQkFBZ0FBQWdrQUFBZ2tBQUFna0FBQWdFRC8vUGoyNmFuM2l3QUEydm54N2RPVEV3QUFDQ1FBQUNDUUFBQ0FRQUlBQUFJSkFBQUlKQUFBSUpBQUFJQkEveXpMNzM4ZnNQY0xBUUNPZDlwOEp3QUFFRWdBQUVBZ0FRQUFnUVFBQUFUNk53RDhFQkFBNW5hKzlVNEFBQ0NRQUFDQVFBSUFBQUs5Q1FDL0F3Q0FPZjI1OFU0QUFDQ1FBQUNBUUFJQUFBTDlGUUIrQndBQWM3bTA3VTRBQUNDUUFBQ0FRQmNEd0dNQUFKakR0VTEzQWdBQWdRUUFBQVM2R2dBZUF3REEyTjdiY2ljQUFCQklBQUJBb0hjRHdHTUFBQmpUclExM0FnQUFnVzRHZ0ZNQUFCakxQZHZ0QkFBQUFna0FBQWgwVndCNERBQUFZN2gzczUwQUFFQ2d1d1BBS1FBQTFMWm1xNTBBQUVDZ1ZRSGdGQUFBYWxxNzBVNEFBQ0RRNmdCd0NnQUF0V3paWmljQUFCQm9Vd0E0QlFDQUdyWnVzaE1BQUFpME9RQ2NBZ0JBWDQ5czhVTW5BQ0lBQVBwNGRJTTlBZ0NBUUE4SGdGTUFBR2hyaisxMUFnQUFnWFlKQUtjQUFOREdYcHU3MndtQUNBQ0FZKzI1dFI0QkFFQ2dYUVBBS1FBQUhHUHZqZDM5QkVBRUFNQytqdGpXUXg0QmlBQUEyTWRSbStvM0FBQVE2TEFBY0FvQUFJODVja3NQUFFFUUFRQ3d6ZEViZXZnakFCRUFBT3UwMkU2L0FRQ0FRRTBDd0NrQUFOeW4xV1kyT3dFUUFRRHd2cFpiMmZRUmdBZ0FnTXRhYjJUejN3Q0lBQUI0cThjMmR2a1JvQWdBZ045NmJXSzNmd3RBQkFDUXJ1Y1dkdjNYQUVVQUFLbDZiMkQzdndlZzl3VUFnTllxYkYvM0FGaVdHaGNDQUZxb3Nua2xBbUJaNmx3UUFEaEtwYTByRXdETFV1dkNBTUNlcW0xY3FRQllsbm9YQ0FBZVZYSGJ5Z1hBc3RTOFVBQ3dSZFZOS3hrQXkxTDNnZ0hBdlNwdldka0FXSmJhRnc0QTNsTjl3MG9Id0xMVXY0QUE4S2NSdHF2OEN6ejMrY3ZQWDcxZkF3QmNNOEx3bjVRL0FUZzMwb1VGSU10b0d6VlVBQ3pMZUJjWWdQbU51RTNEdmVCekhna0EwTk9JdzM4eTNBbkF1WkV2UEFCakczMkRoZzZBWlJuL0JnQXduaG0yWi9nM2NNNGpBUUNPTk1Qd253eC9BbkJ1cGhzRFFDMnpiY3hVYithYzB3QUE5akRiOEo5TSthYk9DUUVBdHBoMStFK21lZ1J3eWV3M0VJRDlKV3pIOUcvd25OTUFBTjZUTVB3bk1XLzBuQkFBNEZ6UzhKL0V2ZUZ6UWdBZ1crTHduOFMrOFhOQ0FDQkw4dkNmeEYrQWMwSUFZRzZHL3o4dXhCVmlBR0FPUnY4eUYrVUdJUUF3SnNQL1BoZG5CVEVBVUp2UnY1OEx0WkVZQUtqQjZHL2pvdTFBREFDMFpmUWY1d0llUUJBQTdNdmc3ODhGYlVBUUFLeGo4SS9uQW5jaUNnQitNL1o5dU9oRkNRUmdGZ2ErcHY4QlJxNmF5UzRpd1VzQUFBQUFTVVZPUks1Q1lJST0iLCAic2l6ZXMiOiAiNTEyeDUxMiIsICJ0eXBlIjogImltYWdlL3BuZyJ9XX0=">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAEn0lEQVR4nO3dS3LTQABFUTnFhCwKVgSLISsii4IhDEgoY/zRp1vdrXfOmIoVeFdtOyE5TZ359OXHr9bXQD2vL8+n1tdwrunFGDvT1DaK3R/Y6Lln7xh2ezDDZ4m9Qqj+IIbPFrVDqPbBDZ+SaoVQ/IMaPjWVDuGp5AczfmorvbEiNRk+LZQ4DTafAMZPKyW2tykA46e1rRtcHYDx04stW1wVgPHTm7WbXByA8dOrNdtcFIDx07ulG50dgPEziiVbnRWA8TOauZt9GIDxM6o52y36rRAwmrsBuPszukcbvhmA8XMU97bsKRDRrgbg7s/R3Nq0E4Bo/wXg7s9RXdu2E4Bo/wTg7s/RXW7cCUC0vwG4+5PifOtOAKJ9aH0BKb5/+7joz3/++rPSlXDuNE2e/tSwdPCPCKK815fnkxOgoNKjv/WxxVCOAAqoOfx7jyeE7QSwwd7Dv/X4QlhPACu0Hv4lIax38gJ4md7Gf0kEy/g6wAK9j3+axrjGnjgBZig1qrl3570fL5kAHtgyxlID7OEajkoAd6wdXq3R9XY9RyCAG9aMba+h9XxtoxHAFaN8384o19kz7wJt1HJUBr2dE+DC3Ltqb+Mb9bpbcwKcGXlEe7/FehQCeDPy+N+JYDkBLNDz+N+NcI09EcCUeUdM/JyvEcBMI91ZR7rW1uIDmHMnHHFQc67ZKSAAwkUHcNS7/zunwGPRAYw87lLS/w58JfjNtTvhUcZx+bkd5fMqwf8JfnM+iiM+LTD665wARIt+DQACIJoAiCYAogmAaAIgmgCIJgCiCYBoAiCaAIgmAKIJgGgCIJoAiCYAogmAaAIgmgCIJgCiCYBoAiCaAIjW7Q/GOuIPp0rW6w/mcgIQTQBEEwDRBEA0ARBNAEQTANEEQDQBEE0ARBMA0br+HWGtvx+o9i/Oq/nxe/qlf71+H9A0OQEIJwCiCYBoAiCaAIgmAKIJgGgCIJoAiCYAogmAaAIgmgCIJgCiCYBoAiCaAIgmAKIJgGgCIJoAiCYAonUdQM8/ToN5ev837DoAqE0ARBMA0QRANAEQTQBEEwDRBEA0ARBNAEQTANEEQDQBEE0ARBMA0QRANAEQTQBEEwDRBEA0ARBNAETrPoDef6wGt43wb9d9AFCTAIh2+vTlx6/WF/HI928fW18CK3gKBJ0TANEEQDQBEE0ARBMA0QRANAEQbYgvhEEtTgCiCYBoAiCaAIgmAKI9vb48n1pfBLTw+vJ8cgIQTQBEEwDRBEC0p2n682Kg9YXAnt437wQgmgCI9jcAT4NIcb51JwDR/gnAKcDRXW7cCUC0/wJwCnBU17btBCDa1QCcAhzNrU07AYh2MwCnAEdxb8t3TwARMLpHG/YUiGgPA3AKMKo52511AoiA0czd7OynQCJgFEu2uug1gAjo3dKNLn4RLAJ6tWabq94FEgG9WbvJ1W+DioBebNnipq8DiIDWtm5w8xfCREArJbZXdLx+2wx7KHnTLfqtEE4Daiu9sWqDdRpQUq2ba/U7thDYovazit2esgiBJfZ6Or37c3YhcM/eryObvmgVA9PU9s2T7t61EcWx9fZO4W8TBnK2r0PypQAAAABJRU5ErkJggg==">
+<meta name="theme-color" content="#3E6DF6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Casa al Día">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -450,6 +455,23 @@ function prevCycleKey(key){
   let ny=y, nm=m-1; if(nm<1){nm=12; ny--;}
   return ny+'-'+String(nm).padStart(2,'0');
 }
+function quincenaKeyFor(iso){
+  const d = new Date(iso+'T12:00:00');
+  const half = d.getDate() <= 15 ? '1' : '2';
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-Q'+half;
+}
+function quincenaLabel(key){
+  const [y,m,q] = key.split('-');
+  const half = q==='Q1' ? '1–15' : '16–fin';
+  const monthLabel = new Intl.DateTimeFormat('es-MX',{month:'long'}).format(new Date(Number(y),Number(m)-1,15));
+  return `${half} ${monthLabel} ${y}`;
+}
+function periodKeyFor(iso, granularity){
+  return granularity==='quincenal' ? quincenaKeyFor(iso) : cycleKeyFor(iso);
+}
+function periodLabel(key, granularity){
+  return granularity==='quincenal' ? quincenaLabel(key) : cycleLabel(key);
+}
 function initials(name){ return (name||'?').trim().slice(0,1).toUpperCase(); }
 function debounce(fn, ms){ let t; return (...a)=>{clearTimeout(t); t=setTimeout(()=>fn(...a), ms);}; }
 
@@ -489,13 +511,14 @@ function emptyBlock(iconName, text){ return `<div class="empty"><div class="empt
 
 /* ---------------- state ---------------- */
 let state = {
-  members: [], items: [], movements: [], bills: [], reminders: [],
+  members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [],
   settings: {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0, budgetByCategory:{}, cycleStartDay:1},
   page: 'dashboard',
   memberId: localStorage.getItem(MEMBER_KEY) || null,
   invTab: 'despensa',
   invSearch: '',
   gastosCycle: null,
+  gastosGranularity: 'mensual', // mensual | quincenal
   dbMode: 'connecting', // connecting | live | local
   db: null,
   charts: {}
@@ -509,7 +532,8 @@ function saveLocalSnapshot(){
   try{
     localStorage.setItem(LOCAL_KEY, JSON.stringify({
       members:state.members, items:state.items, movements:state.movements,
-      bills:state.bills, reminders:state.reminders, settings:state.settings
+      bills:state.bills, reminders:state.reminders, settings:state.settings,
+      closedCycles:state.closedCycles
     }));
   }catch(e){}
 }
@@ -625,6 +649,10 @@ function subscribeAll(){
   }, ()=>{});
   db.collection('reminders').onSnapshot(snap=>{
     state.reminders = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+    render();
+  }, ()=>{});
+  db.collection('closedCycles').onSnapshot(snap=>{
+    state.closedCycles = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
     render();
   }, ()=>{});
   db.doc('settings/config').onSnapshot(snap=>{
@@ -745,6 +773,7 @@ const NAV = [
   {id:'insumos', label:'Insumos', icon:'box'},
   {id:'servicios', label:'Servicios', icon:'bolt'},
   {id:'gastos', label:'Gastos', icon:'cash'},
+  {id:'saldos', label:'Saldo entre integrantes', icon:'wallet'},
   {id:'recordatorios', label:'Recordatorios', icon:'bell'},
   {id:'ciclos', label:'Ciclos e historial', icon:'cycle'},
   {id:'config', label:'Miembros y ajustes', icon:'users'}
@@ -835,7 +864,7 @@ function renderMain(){
   const pages = {
     dashboard: pageDashboard, super: pageShoppingList, despensa: ()=>pageInventory('despensa'),
     'limpieza-higiene': pageLimpiezaHigiene, insumos: ()=>pageInventory('insumos'),
-    servicios: pageServicios, gastos: pageGastos, recordatorios: pageRecordatorios,
+    servicios: pageServicios, gastos: pageGastos, saldos: pageSaldos, recordatorios: pageRecordatorios,
     ciclos: pageCiclos, config: pageConfig
   };
   el.innerHTML = (pages[state.page] || pageDashboard)();
@@ -865,6 +894,7 @@ function pageDashboard(){
       </div>
       <div class="topbar-actions">
         <button class="btn" onclick="App.openMovement('consumo')">${icon('basket')} Registrar consumo</button>
+        <button class="btn" onclick="App.openTicket()">${icon('cart')} Ticket de compra</button>
         <button class="btn btn-primary" onclick="App.openMovement('compra')">${icon('plus')} Registrar compra</button>
       </div>
     </div>
@@ -1032,11 +1062,11 @@ function renderTopMembers(){
 function allExpenseRows(){
   const rows = [];
   state.movements.filter(m=>m.type==='compra').forEach(m=>{
-    rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(m.total)||0, memberName:m.memberName, source:'movement', ref:m});
+    rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(m.total)||0, memberName:m.memberName, memberId:m.memberId, source:'movement', ref:m});
   });
   state.bills.forEach(b=>{
     (b.history||[]).forEach(h=>{
-      rows.push({date:h.paidAt, category:'servicio', name:b.name, amount:Number(h.amount)||0, memberName:h.memberName, source:'bill', ref:b, period:h.period});
+      rows.push({date:h.paidAt, category:'servicio', name:b.name, amount:Number(h.amount)||0, memberName:h.memberName, memberId:h.memberId, source:'bill', ref:b, period:h.period});
     });
   });
   rows.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
@@ -1057,6 +1087,59 @@ function allCycleKeys(){
   allExpenseRows().forEach(r=> keys.add(cycleKeyFor(r.date)));
   keys.add(cycleKeyFor(todayISO()));
   return Array.from(keys).sort();
+}
+function computeStatsForPeriod(periodKey, granularity){
+  const byCat = {};
+  let total = 0;
+  allExpenseRows().forEach(r=>{
+    if(periodKeyFor(r.date, granularity) !== periodKey) return;
+    byCat[r.category] = (byCat[r.category]||0) + r.amount;
+    total += r.amount;
+  });
+  return {total, byCat};
+}
+function allPeriodKeys(granularity){
+  const keys = new Set();
+  allExpenseRows().forEach(r=> keys.add(periodKeyFor(r.date, granularity)));
+  keys.add(periodKeyFor(todayISO(), granularity));
+  return Array.from(keys).sort();
+}
+/* ---------------- balances / saldo entre integrantes ---------------- */
+function computeBalances(periodKey, granularity){
+  const rows = allExpenseRows().filter(r=> periodKeyFor(r.date, granularity) === periodKey);
+  const total = rows.reduce((s,r)=>s+r.amount,0);
+  const activeMembers = state.members.length ? state.members : [];
+  const n = activeMembers.length;
+  const fairShare = n ? total/n : 0;
+  const paidByMember = {};
+  activeMembers.forEach(m=> paidByMember[m.id] = 0);
+  rows.forEach(r=>{
+    if(r.memberId && paidByMember.hasOwnProperty(r.memberId)){
+      paidByMember[r.memberId] += r.amount;
+    }
+  });
+  const unassigned = rows.filter(r=> !r.memberId || !paidByMember.hasOwnProperty(r.memberId))
+                          .reduce((s,r)=>s+r.amount,0);
+  const balances = activeMembers.map(m=>({
+    member: m,
+    paid: paidByMember[m.id]||0,
+    fairShare,
+    balance: (paidByMember[m.id]||0) - fairShare // positive = le deben, negative = debe
+  }));
+  // Greedy settle-up: whoever owes pays whoever is owed, in descending amounts.
+  const creditors = balances.filter(b=>b.balance>0.5).map(b=>({id:b.member.id, name:b.member.name, amt:b.balance})).sort((a,b)=>b.amt-a.amt);
+  const debtors = balances.filter(b=>b.balance<-0.5).map(b=>({id:b.member.id, name:b.member.name, amt:-b.balance})).sort((a,b)=>b.amt-a.amt);
+  const transfers = [];
+  let ci=0, di=0;
+  while(ci<creditors.length && di<debtors.length){
+    const c = creditors[ci], d = debtors[di];
+    const amt = Math.min(c.amt, d.amt);
+    if(amt>0.5) transfers.push({from:d.name, to:c.name, amount:amt});
+    c.amt -= amt; d.amt -= amt;
+    if(c.amt<=0.5) ci++;
+    if(d.amt<=0.5) di++;
+  }
+  return {total, fairShare, balances, transfers, unassigned};
 }
 
 /* ---------------- charts ---------------- */
@@ -1109,6 +1192,10 @@ function pageShoppingList(){
         <h1 class="page-title">Lista del súper</h1>
         <div class="page-sub">${rows.length ? rows.length+' artículo(s) por comprar' : 'Nada pendiente por ahora'}</div>
       </div>
+      ${rows.length ? `<div class="topbar-actions">
+        <button class="btn" onclick="App.shareShoppingList()">${icon('bell')} Enviar aviso</button>
+        <button class="btn btn-primary" onclick="App.openTicket(true)">${icon('cart')} Comprar todo (ticket)</button>
+      </div>` : ''}
     </div>
     <div class="panel">
       <div class="panel-body pad0">
@@ -1281,9 +1368,10 @@ function billCard(b){
 
 /* ---------------- PAGE: gastos ---------------- */
 function pageGastos(){
-  const keys = allCycleKeys().reverse();
-  const activeCycle = state.gastosCycle || keys[0];
-  const rows = allExpenseRows().filter(r=>cycleKeyFor(r.date)===activeCycle);
+  const gran = state.gastosGranularity || 'mensual';
+  const keys = allPeriodKeys(gran).reverse();
+  const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
+  const rows = allExpenseRows().filter(r=>periodKeyFor(r.date, gran)===activeCycle);
   const total = rows.reduce((s,r)=>s+r.amount,0);
   return `
     <div class="topbar">
@@ -1293,8 +1381,12 @@ function pageGastos(){
         <div class="page-sub">${rows.length} movimiento(s) · total ${fmtMoney(total)}</div>
       </div>
       <div class="topbar-actions">
+        <div class="tabs">
+          <div class="tab ${gran==='mensual'?'active':''}" onclick="App.setGastosGranularity('mensual')">Mensual</div>
+          <div class="tab ${gran==='quincenal'?'active':''}" onclick="App.setGastosGranularity('quincenal')">Quincenal</div>
+        </div>
         <select class="btn" style="font-weight:600" onchange="App.setGastosCycle(this.value)">
-          ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(cycleLabel(k))}</option>`).join('')}
+          ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(periodLabel(k, gran))}</option>`).join('')}
         </select>
         <button class="btn btn-primary" onclick="App.openManualExpense()">${icon('plus')} Gasto manual</button>
       </div>
@@ -1313,6 +1405,61 @@ function pageGastos(){
         </table></div>` : emptyBlock('cash', 'Sin gastos en este ciclo todavía.')}
       </div>
     </div>
+  `;
+}
+
+/* ---------------- PAGE: saldos entre integrantes ---------------- */
+function pageSaldos(){
+  const gran = state.gastosGranularity || 'mensual';
+  const keys = allPeriodKeys(gran).reverse();
+  const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
+  const b = computeBalances(activeCycle, gran);
+  const hasMembers = state.members.length>=2;
+  return `
+    <div class="topbar">
+      <div>
+        <div class="page-eyebrow">Entre la casa</div>
+        <h1 class="page-title">Saldo entre integrantes</h1>
+        <div class="page-sub">Reparto justo del gasto de ${cap(periodLabel(activeCycle, gran))}</div>
+      </div>
+      <div class="topbar-actions">
+        <div class="tabs">
+          <div class="tab ${gran==='mensual'?'active':''}" onclick="App.setGastosGranularity('mensual')">Mensual</div>
+          <div class="tab ${gran==='quincenal'?'active':''}" onclick="App.setGastosGranularity('quincenal')">Quincenal</div>
+        </div>
+        <select class="btn" style="font-weight:600" onchange="App.setGastosCycle(this.value)">
+          ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(periodLabel(k, gran))}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    ${!hasMembers ? `<div class="panel"><div class="panel-body">${emptyBlock('users','Agrega al menos dos miembros de la casa en Ajustes para poder calcular un saldo entre integrantes.')}</div></div>` : `
+    <div class="panel">
+      <div class="panel-body pad0">
+        <div class="table-scroll"><table>
+          <thead><tr><th>Integrante</th><th>Pagó</th><th>Le tocaba</th><th>Saldo</th></tr></thead>
+          <tbody>${b.balances.map(row=>{
+            const good = row.balance >= -0.5;
+            return `<tr>
+              <td><div style="display:flex; align-items:center; gap:8px;"><span class="avatar" style="background:${row.member.color||'#3E6DF6'}; width:26px; height:26px; font-size:11px;">${initials(row.member.name)}</span>${esc(row.member.name)}</div></td>
+              <td class="num">${fmtMoney(row.paid)}</td>
+              <td class="num row-sub">${fmtMoney(row.fairShare)}</td>
+              <td class="num" style="font-weight:700; color:${good?'var(--good)':'var(--bad)'}">${row.balance>=0?'+':''}${fmtMoney(row.balance)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>
+      </div>
+    </div>
+    ${b.unassigned>0.5 ? `<div class="page-sub" style="margin-top:8px;">${fmtMoney(b.unassigned)} en gastos de este periodo no tienen un integrante asignado (quedan fuera del cálculo).</div>` : ''}
+    <div class="panel" style="margin-top:14px;">
+      <div class="panel-header"><div class="panel-title">${icon('wallet')} Para saldar cuentas</div></div>
+      <div class="panel-body pad0">
+        ${b.transfers.length ? b.transfers.map(t=>`<div class="list-item">
+          <div class="list-icon">${icon('wallet')}</div>
+          <div class="list-main"><div class="list-title">${esc(t.from)} le transfiere a ${esc(t.to)}</div></div>
+          <div class="list-end"><span style="font-weight:700;">${fmtMoney(t.amount)}</span></div>
+        </div>`).join('') : emptyBlock('check','Todos están al parejo — nadie le debe a nadie en este periodo.')}
+      </div>
+    </div>`}
   `;
 }
 
@@ -1377,6 +1524,12 @@ function reminderRow(r){
 }
 
 /* ---------------- PAGE: ciclos ---------------- */
+function catCellHtml(amount, catKey){
+  const budgetCat = Number((state.settings.budgetByCategory||{})[catKey])||0;
+  if(!amount) return '<td class="num row-sub">—</td>';
+  const over = budgetCat>0 && amount>budgetCat;
+  return `<td class="num" style="${over?'color:var(--bad); font-weight:700;':''}">${fmtMoney(amount)}</td>`;
+}
 function pageCiclos(){
   const keys = allCycleKeys().reverse();
   const budget = Number(state.settings.monthlyBudget)||0;
@@ -1391,21 +1544,24 @@ function pageCiclos(){
     <div class="panel">
       <div class="panel-body pad0">
         <div class="table-scroll"><table>
-          <thead><tr><th>Ciclo</th><th>Despensa</th><th>Servicios</th><th>Limpieza</th><th>Higiene</th><th>Insumos</th><th>Otros</th><th>Total</th><th>Presupuesto</th></tr></thead>
+          <thead><tr><th>Ciclo</th><th>Despensa</th><th>Servicios</th><th>Limpieza</th><th>Higiene</th><th>Insumos</th><th>Otros</th><th>Total</th><th>Presupuesto</th><th>Cierre</th></tr></thead>
           <tbody>
           ${keys.map(k=>{
             const s = computeCycleStats(k);
             const overBudget = budget>0 && s.total>budget;
+            const closed = state.closedCycles.find(c=>c.id===k || c.cycleKey===k);
+            const isCurrent = k === cycleKeyFor(todayISO());
             return `<tr>
               <td class="row-title">${cap(cycleLabel(k))}</td>
-              <td class="num">${s.byCat.despensa?fmtMoney(s.byCat.despensa):'—'}</td>
-              <td class="num">${s.byCat.servicio?fmtMoney(s.byCat.servicio):'—'}</td>
-              <td class="num">${s.byCat.limpieza?fmtMoney(s.byCat.limpieza):'—'}</td>
-              <td class="num">${s.byCat.higiene?fmtMoney(s.byCat.higiene):'—'}</td>
-              <td class="num">${s.byCat.insumos?fmtMoney(s.byCat.insumos):'—'}</td>
+              ${catCellHtml(s.byCat.despensa, 'despensa')}
+              ${catCellHtml(s.byCat.servicio, 'servicio')}
+              ${catCellHtml(s.byCat.limpieza, 'limpieza')}
+              ${catCellHtml(s.byCat.higiene, 'higiene')}
+              ${catCellHtml(s.byCat.insumos, 'insumos')}
               <td class="num">${s.byCat.otro?fmtMoney(s.byCat.otro):'—'}</td>
               <td class="num" style="font-weight:700">${fmtMoney(s.total)}</td>
               <td>${budget>0?`<span class="badge ${overBudget?'badge-bad':'badge-good'}"><span class="dot ${overBudget?'dot-bad':'dot-good'}"></span>${overBudget?'Excedido':'Dentro'}</span>`:'—'}</td>
+              <td>${closed?`<span class="badge badge-good"><span class="dot dot-good"></span>Cerrado</span>`:isCurrent?`<button class="btn btn-sm" onclick="App.confirmCloseCycle('${k}')">Cerrar ciclo</button>`:`<button class="btn btn-sm btn-ghost" onclick="App.confirmCloseCycle('${k}')">Cerrar</button>`}</td>
             </tr>`;
           }).join('')}
           </tbody>
@@ -1448,6 +1604,18 @@ function pageConfig(){
           <div class="field-row">
             <div class="field"><label>Presupuesto mensual (MXN)</label><input id="cfgBudget" type="number" min="0" value="${s.monthlyBudget||0}"></div>
             <div class="field"><label>Día de inicio de ciclo</label><input id="cfgCycleStart" type="number" min="1" max="28" value="${s.cycleStartDay||1}"></div>
+          </div>
+          <div class="field-row" style="margin-top:2px;">
+            <div class="field"><label>Presupuesto Despensa</label><input id="cfgBudgetDespensa" type="number" min="0" value="${(s.budgetByCategory&&s.budgetByCategory.despensa)||0}"></div>
+            <div class="field"><label>Presupuesto Servicios</label><input id="cfgBudgetServicio" type="number" min="0" value="${(s.budgetByCategory&&s.budgetByCategory.servicio)||0}"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Presupuesto Limpieza</label><input id="cfgBudgetLimpieza" type="number" min="0" value="${(s.budgetByCategory&&s.budgetByCategory.limpieza)||0}"></div>
+            <div class="field"><label>Presupuesto Higiene</label><input id="cfgBudgetHigiene" type="number" min="0" value="${(s.budgetByCategory&&s.budgetByCategory.higiene)||0}"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Presupuesto Insumos</label><input id="cfgBudgetInsumos" type="number" min="0" value="${(s.budgetByCategory&&s.budgetByCategory.insumos)||0}"></div>
+            <div class="field"></div>
           </div>
           <button class="btn btn-primary" onclick="App.saveConfig()">Guardar</button>
         </div>
@@ -1544,6 +1712,34 @@ function modalMovement(type, itemId){
   `);
 }
 
+let ticketRowSeq = 0;
+function ticketRowHtml(items, itemId){
+  const rowId = 'tkrow'+(ticketRowSeq++);
+  return `<div class="ticket-row" id="${rowId}" style="display:flex; align-items:flex-end; gap:8px; margin-bottom:8px;">
+    <div class="field" style="flex:2; margin:0;"><label>Artículo</label><select class="tkItem">${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}</select></div>
+    <div class="field" style="flex:1; margin:0;"><label>Cantidad</label><input class="tkQty" type="number" step="any" min="0" value="1" oninput="App.updateTicketTotal()"></div>
+    <div class="field" style="flex:1; margin:0;"><label>Costo (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="0" oninput="App.updateTicketTotal()"></div>
+    <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
+  </div>`;
+}
+function modalTicket(prefillItemIds){
+  if(!state.items.length){ toast('Primero agrega un artículo'); return; }
+  ticketRowSeq = 0;
+  const items = state.items.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const ids = (prefillItemIds && prefillItemIds.length) ? prefillItemIds : [items[0].id];
+  openModal(`
+    <div class="modal-header"><h3>Ticket de compra</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Fecha del ticket</label><input id="tkDate" type="date" value="${todayISO()}"></div>
+      <div id="ticketRows">${ids.map(id=>ticketRowHtml(items, id)).join('')}</div>
+      <button class="btn btn-sm" style="margin-top:6px;" onclick="App.addTicketRow()">${icon('plus')} Agregar línea</button>
+      <div style="display:flex; justify-content:flex-end; align-items:baseline; gap:8px; margin-top:14px; font-weight:700; font-size:16px;">Total del ticket <span id="tkTotal">${fmtMoney(0)}</span></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveTicket()">Guardar ticket</button></div>
+  `);
+  App.updateTicketTotal();
+}
+
 function modalManualExpense(){
   openModal(`
     <div class="modal-header"><h3>Gasto manual</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
@@ -1620,6 +1816,7 @@ window.App = {
   setInvTab(t){ state.invTab = t; render(); },
   setSearch: debounce(function(v){ state.invSearch = v; render(); const inp=document.querySelector('.search input'); if(inp){inp.focus(); inp.selectionStart=inp.selectionEnd=inp.value.length;} }, 180),
   setGastosCycle(v){ state.gastosCycle = v; render(); },
+  setGastosGranularity(v){ state.gastosGranularity = v; state.gastosCycle = null; render(); },
 
   openMemberSwitch(){ modalMemberSwitch(); },
   selectMember(id){ state.memberId=id; localStorage.setItem(MEMBER_KEY, id); closeModal(); render(); },
@@ -1696,6 +1893,86 @@ window.App = {
     closeModal(); toast(type==='compra'?'Compra registrada':'Consumo registrado'); render();
   },
 
+  openTicket(fromShoppingList){
+    const ids = fromShoppingList ? shoppingListItems().map(r=>r.item.id) : null;
+    modalTicket(ids);
+  },
+  addTicketRow(){
+    const items = state.items.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    if(!items.length) return;
+    document.getElementById('ticketRows').insertAdjacentHTML('beforeend', ticketRowHtml(items, items[0].id));
+    App.updateTicketTotal();
+  },
+  removeTicketRow(rowId){
+    const rows = document.querySelectorAll('.ticket-row');
+    if(rows.length<=1){ toast('Debe quedar al menos una línea'); return; }
+    const el = document.getElementById(rowId);
+    if(el) el.remove();
+    App.updateTicketTotal();
+  },
+  updateTicketTotal(){
+    let total = 0;
+    document.querySelectorAll('.tkCost').forEach(inp=>{ total += Number(inp.value)||0; });
+    const el = document.getElementById('tkTotal');
+    if(el) el.textContent = fmtMoney(total);
+  },
+  async saveTicket(){
+    const date = document.getElementById('tkDate').value || todayISO();
+    const rowEls = Array.from(document.querySelectorAll('.ticket-row'));
+    const mem = currentMember();
+    let count = 0;
+    for(const row of rowEls){
+      const itemId = row.querySelector('.tkItem').value;
+      const qty = Number(row.querySelector('.tkQty').value)||0;
+      const cost = Number(row.querySelector('.tkCost').value)||0;
+      const item = state.items.find(i=>i.id===itemId);
+      if(!item || (!qty && !cost)) continue;
+      const newQty = Number(item.currentQty||0) + qty;
+      await Data.set('items', item.id, {currentQty:newQty, updatedAt:date, shoppingFlag:false, shoppingFlagBy:null, shoppingFlagAt:null}, true);
+      await Data.add('movements', {
+        itemId:item.id, itemName:item.name, category:item.category, type:'compra', qty, unitCost: qty?cost/qty:0,
+        total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra'
+      });
+      count++;
+    }
+    closeModal();
+    if(count) toast(count+' línea(s) del ticket registradas'); else toast('No se registró ninguna línea');
+    render();
+  },
+
+  shareShoppingList(){
+    const rows = shoppingListItems();
+    const bills = dueSoonBills(3);
+    const lines = [];
+    lines.push(`Lista del súper — ${state.settings.householdName||'Casa'}`);
+    lines.push('');
+    if(rows.length){
+      rows.forEach(r=>{
+        const brand = r.item.brand ? ` (marca: ${r.item.brand})` : '';
+        lines.push(`• ${r.item.name}${brand}`);
+      });
+    } else {
+      lines.push('Sin pendientes por ahora.');
+    }
+    if(bills.length){
+      lines.push('');
+      lines.push('Servicios por vencer:');
+      bills.forEach(b=> lines.push(`• ${b.name} — ${b.nextDueDate?fmtDate(b.nextDueDate):'sin fecha'}`));
+    }
+    const text = lines.join('\n');
+    openModal(`
+      <div class="modal-header"><h3>Enviar aviso</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+      <div class="modal-body">
+        <div class="page-sub" style="margin-bottom:10px;">Esta app no tiene servidor propio, así que en vez de un correo automático, aquí tienes el resumen listo para enviar por WhatsApp o correo con un toque.</div>
+        <textarea readonly style="width:100%; min-height:180px; font-family:inherit; font-size:13.5px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2, transparent); color:inherit;">${esc(text)}</textarea>
+      </div>
+      <div class="modal-foot">
+        <a class="btn" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Compartir por WhatsApp</a>
+        <a class="btn btn-primary" href="mailto:?subject=${encodeURIComponent('Lista del súper')}&body=${encodeURIComponent(text)}">Enviar por correo</a>
+      </div>
+    `);
+  },
+
   openManualExpense(){ modalManualExpense(); },
   async saveManualExpense(){
     const name = document.getElementById('meName').value.trim();
@@ -1746,11 +2023,29 @@ window.App = {
   },
   async toggleReminder(id, done){ await Data.set('reminders', id, {done}, true); render(); },
 
+  async confirmCloseCycle(cycleKey){
+    if(state.closedCycles.find(c=>c.id===cycleKey || c.cycleKey===cycleKey)){ toast('Ese ciclo ya está cerrado'); return; }
+    if(!confirm(`¿Cerrar el ciclo de ${cycleLabel(cycleKey)}? Esto guarda una foto del gasto final del ciclo; los movimientos no se borran ni se pueden editar después de cerrarlo.`)) return;
+    const s = computeCycleStats(cycleKey);
+    await Data.set('closedCycles', cycleKey, {
+      cycleKey, closedAt: todayISO(), total: s.total, byCat: s.byCat,
+      closedBy: currentMember()?currentMember().name:null
+    }, false);
+    toast('Ciclo cerrado'); render();
+  },
+
   async saveConfig(){
     const data = {
       householdName: document.getElementById('cfgHouseholdName').value.trim() || 'Mi Casa',
       monthlyBudget: Number(document.getElementById('cfgBudget').value)||0,
-      cycleStartDay: Math.min(28, Math.max(1, Number(document.getElementById('cfgCycleStart').value)||1))
+      cycleStartDay: Math.min(28, Math.max(1, Number(document.getElementById('cfgCycleStart').value)||1)),
+      budgetByCategory: {
+        despensa: Number(document.getElementById('cfgBudgetDespensa').value)||0,
+        servicio: Number(document.getElementById('cfgBudgetServicio').value)||0,
+        limpieza: Number(document.getElementById('cfgBudgetLimpieza').value)||0,
+        higiene: Number(document.getElementById('cfgBudgetHigiene').value)||0,
+        insumos: Number(document.getElementById('cfgBudgetInsumos').value)||0
+      }
     };
     await Data.setSettings(data, true);
     toast('Ajustes guardados'); render();
@@ -1764,7 +2059,7 @@ window.App = {
     downloadFile('gastos_casa.csv', csv);
   },
   exportJSON(){
-    const payload = JSON.stringify({members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings}, null, 2);
+    const payload = JSON.stringify({members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings, closedCycles:state.closedCycles}, null, 2);
     downloadFile('respaldo_casa.json', payload);
   },
 
