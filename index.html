@@ -1383,8 +1383,9 @@ function billCard(b){
     <div class="bill-meta">${b.nextDueDate? 'Próximo pago: '+fmtDate(b.nextDueDate,{day:'numeric',month:'long'}) : 'Sin próxima fecha'}${lastPaid?' · último pago '+fmtDate(lastPaid.paidAt):''}</div>
     <div class="bill-actions">
       <button class="btn btn-sm btn-primary" onclick="App.openPayBill('${b.id}')">Marcar pagado</button>
-      <button class="btn btn-sm btn-ghost" onclick="App.openBillForm('${b.id}')">${icon('edit')}</button>
-      <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteBill('${b.id}')">${icon('trash')}</button>
+      <button class="btn btn-sm btn-ghost" onclick="App.openBillHistory('${b.id}')" title="Historial de pagos">${icon('chart')}</button>
+      <button class="btn btn-sm btn-ghost" onclick="App.openBillForm('${b.id}')" title="Editar servicio">${icon('edit')}</button>
+      <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteBill('${b.id}')" title="Eliminar servicio">${icon('trash')}</button>
     </div>
   </div>`;
 }
@@ -1424,7 +1425,7 @@ function pageGastos(){
             <td>${esc(r.name)}</td>
             <td class="row-sub">${esc(r.memberName||'—')}</td>
             <td class="num">${fmtMoney(r.amount)}</td>
-            <td style="text-align:right; white-space:nowrap;">${r.source==='movement' ? `<button class="btn btn-sm btn-ghost" onclick="App.openEditMovement('${r.ref.id}')" title="Editar">${icon('edit')}</button>` : `<span class="row-sub" title="Los pagos de servicios se editan desde Servicios">—</span>`}</td>
+            <td style="text-align:right; white-space:nowrap;">${r.source==='movement' ? `<button class="btn btn-sm btn-ghost" onclick="App.openEditMovement('${r.ref.id}')" title="Editar">${icon('edit')}</button>` : `<button class="btn btn-sm btn-ghost" onclick="App.openBillHistory('${r.ref.id}')" title="Editar pago de servicio">${icon('edit')}</button>`}</td>
           </tr>`).join('')}</tbody>
         </table></div>` : emptyBlock('cash', 'Sin gastos en este ciclo todavía.')}
       </div>
@@ -1861,6 +1862,49 @@ function modalPayBill(id){
   `);
 }
 
+function modalBillHistory(billId){
+  const b = state.bills.find(x=>x.id===billId);
+  if(!b) return;
+  const entries = (b.history||[]).map((h,i)=>Object.assign({_idx:i}, h)).sort((x,y)=>(y.paidAt||'').localeCompare(x.paidAt||''));
+  openModal(`
+    <div class="modal-header"><h3>Historial de pagos · ${esc(b.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body" style="padding:0;">
+      ${entries.length ? entries.map(h=>`<div class="list-item">
+        <div class="list-icon">${icon('cash')}</div>
+        <div class="list-main"><div class="list-title">${fmtMoney(Number(h.amount)||0)}</div><div class="list-sub">${fmtDate(h.paidAt)} · ${esc(h.memberName||'—')}</div></div>
+        <div class="list-end" style="display:flex; gap:4px;">
+          <button class="btn btn-sm btn-ghost" onclick="App.openEditBillPayment('${billId}', ${h._idx})" title="Editar">${icon('edit')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteBillPayment('${billId}', ${h._idx})" title="Eliminar">${icon('trash')}</button>
+        </div>
+      </div>`).join('') : `<div style="padding:16px;">${emptyBlock('cash','Este servicio todavía no tiene pagos registrados.')}</div>`}
+    </div>
+  `);
+}
+
+function modalEditBillPayment(billId, idx){
+  const b = state.bills.find(x=>x.id===billId);
+  const h = b && (b.history||[])[idx];
+  if(!b || !h){ toast('No se encontró ese pago'); return; }
+  const members = state.members.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  openModal(`
+    <div class="modal-header"><h3>Editar pago</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Monto pagado (MXN)</label><input id="bpAmount" type="number" step="any" min="0" value="${Number(h.amount)||0}"></div>
+      <div class="field"><label>Fecha de pago</label><input id="bpDate" type="date" value="${h.paidAt||todayISO()}"></div>
+      <div class="field"><label>¿Quién lo pagó?</label>
+        <select id="bpMember">
+          <option value="" ${!h.memberId?'selected':''}>— Sin asignar —</option>
+          ${members.map(mb=>`<option value="${mb.id}" ${mb.id===h.memberId?'selected':''}>${esc(mb.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-danger" onclick="App.confirmDeleteBillPayment('${billId}', ${idx})">Eliminar</button>
+      <button class="btn btn-primary" onclick="App.saveEditBillPayment('${billId}', ${idx})">Guardar cambios</button>
+    </div>
+  `);
+}
+
 function modalReminderForm(){
   openModal(`
     <div class="modal-header"><h3>Nuevo recordatorio</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
@@ -2183,6 +2227,36 @@ window.App = {
     const nextDueDate = addMonths(b.nextDueDate||paidAt, months);
     await Data.set('bills', id, {history, nextDueDate, amountEstimate: amount||b.amountEstimate}, true);
     closeModal(); toast('Pago registrado'); render();
+  },
+
+  openBillHistory(id){ modalBillHistory(id); },
+  openEditBillPayment(billId, idx){ modalEditBillPayment(billId, idx); },
+  async saveEditBillPayment(billId, idx){
+    const b = state.bills.find(x=>x.id===billId);
+    if(!b) return;
+    const amount = Number(document.getElementById('bpAmount').value)||0;
+    const paidAt = document.getElementById('bpDate').value || todayISO();
+    const memberId = document.getElementById('bpMember').value || null;
+    const mem = memberId ? state.members.find(x=>x.id===memberId) : null;
+    const history = (b.history||[]).slice();
+    if(!history[idx]) return;
+    history[idx] = Object.assign({}, history[idx], {amount, paidAt, memberId: mem?mem.id:null, memberName: mem?mem.name:'—'});
+    await Data.set('bills', billId, {history}, true);
+    toast('Pago actualizado'); render();
+    modalBillHistory(billId);
+  },
+  async confirmDeleteBillPayment(billId, idx){
+    const b = state.bills.find(x=>x.id===billId);
+    if(!b) return;
+    const h = (b.history||[])[idx];
+    const label = h ? `${fmtMoney(Number(h.amount)||0)} del ${fmtDate(h.paidAt)}` : 'este pago';
+    if(confirm(`¿Eliminar el pago de ${label}? Esta acción no se puede deshacer.`)){
+      const history = (b.history||[]).slice();
+      history.splice(idx,1);
+      await Data.set('bills', billId, {history}, true);
+      toast('Pago eliminado'); render();
+      modalBillHistory(billId);
+    }
   },
 
   openReminderForm(){ modalReminderForm(); },
