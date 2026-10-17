@@ -318,7 +318,10 @@
   .hero-card p{position:relative; z-index:1; max-width:75%; margin:0 0 16px;}
   .hero-card .btn-primary{position:relative; z-index:1; align-self:flex-start;}
   .wallet-card{
-    background:linear-gradient(155deg, var(--ink) 0%, color-mix(in srgb, var(--ink) 80%, var(--accent)) 100%);
+    /* Fondo oscuro fijo (no usa --ink, que cambia de claro a oscuro según el
+       tema) para que el texto blanco siempre tenga buen contraste, sea cual
+       sea el modo elegido. */
+    background:linear-gradient(155deg, #201C33 0%, color-mix(in srgb, #201C33 70%, var(--accent)) 100%);
     color:#fff; border-radius:24px; padding:26px; display:flex; flex-direction:column; justify-content:space-between;
     animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both; animation-delay:.05s; min-height:168px;
   }
