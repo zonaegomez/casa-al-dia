@@ -1417,13 +1417,14 @@ function pageGastos(){
     <div class="panel">
       <div class="panel-body pad0">
         ${rows.length ? `<div class="table-scroll"><table>
-          <thead><tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th>Quién</th><th>Monto</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th>Quién</th><th>Monto</th><th></th></tr></thead>
           <tbody>${rows.map(r=>`<tr>
             <td class="row-sub">${fmtDate(r.date)}</td>
             <td><span class="badge" style="background:${hexSoft((CATS[r.category]||{}).color||'#999')};color:${(CATS[r.category]||{}).color||'#666'}">${(CATS[r.category]||{}).label||r.category}</span></td>
             <td>${esc(r.name)}</td>
             <td class="row-sub">${esc(r.memberName||'—')}</td>
             <td class="num">${fmtMoney(r.amount)}</td>
+            <td style="text-align:right; white-space:nowrap;">${r.source==='movement' ? `<button class="btn btn-sm btn-ghost" onclick="App.openEditMovement('${r.ref.id}')" title="Editar">${icon('edit')}</button>` : `<span class="row-sub" title="Los pagos de servicios se editan desde Servicios">—</span>`}</td>
           </tr>`).join('')}</tbody>
         </table></div>` : emptyBlock('cash', 'Sin gastos en este ciclo todavía.')}
       </div>
@@ -1798,6 +1799,33 @@ function modalManualExpense(){
   `);
 }
 
+function modalEditMovement(id){
+  const m = state.movements.find(x=>x.id===id);
+  if(!m){ toast('No se encontró ese gasto'); return; }
+  const members = state.members.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  openModal(`
+    <div class="modal-header"><h3>Editar gasto</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Concepto</label><input id="emName" value="${esc(m.itemName||'')}" placeholder="Ej. Ferretería, reparación…"></div>
+      <div class="field-row">
+        <div class="field"><label>Categoría</label><select id="emCat">${Object.keys(CATS).map(c=>`<option value="${c}" ${c===m.category?'selected':''}>${CATS[c].label}</option>`).join('')}</select></div>
+        <div class="field"><label>Monto (MXN)</label><input id="emAmount" type="number" step="any" min="0" value="${Number(m.total)||0}"></div>
+      </div>
+      <div class="field"><label>Fecha</label><input id="emDate" type="date" value="${m.date||todayISO()}"></div>
+      <div class="field"><label>¿Quién lo pagó?</label>
+        <select id="emMember">
+          <option value="" ${!m.memberId?'selected':''}>— Sin asignar —</option>
+          ${members.map(mb=>`<option value="${mb.id}" ${mb.id===m.memberId?'selected':''}>${esc(mb.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-danger" onclick="App.confirmDeleteMovement('${id}')">Eliminar</button>
+      <button class="btn btn-primary" onclick="App.saveEditMovement('${id}')">Guardar cambios</button>
+    </div>
+  `);
+}
+
 function modalBillForm(id){
   const b = id ? state.bills.find(x=>x.id===id) : null;
   openModal(`
@@ -2104,6 +2132,29 @@ window.App = {
     const mem = currentMember();
     await Data.add('movements', { itemId:null, itemName:name, category, type:'compra', qty:1, unitCost:amount, total:amount, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'' });
     closeModal(); toast('Gasto agregado'); render();
+  },
+
+  openEditMovement(id){ modalEditMovement(id); },
+  async saveEditMovement(id){
+    const name = document.getElementById('emName').value.trim();
+    const amount = Number(document.getElementById('emAmount').value)||0;
+    const date = document.getElementById('emDate').value || todayISO();
+    const category = document.getElementById('emCat').value;
+    const memberId = document.getElementById('emMember').value || null;
+    if(!name){ toast('Descríbelo brevemente'); return; }
+    const mem = memberId ? state.members.find(x=>x.id===memberId) : null;
+    await Data.set('movements', id, {
+      itemName:name, category, total:amount, date,
+      memberId: mem?mem.id:null, memberName: mem?mem.name:'—'
+    }, true);
+    closeModal(); toast('Gasto actualizado'); render();
+  },
+  confirmDeleteMovement(id){
+    const m = state.movements.find(x=>x.id===id);
+    const label = m ? `"${m.itemName||'este gasto'}" (${fmtMoney(Number(m.total)||0)})` : 'este gasto';
+    if(confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`)){
+      Data.del('movements', id); closeModal(); toast('Gasto eliminado'); render();
+    }
   },
 
   openBillForm(id){ modalBillForm(id); },
