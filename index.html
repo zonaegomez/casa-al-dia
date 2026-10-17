@@ -669,7 +669,7 @@ function emptyBlock(iconName, text){ return `<div class="empty"><div class="empt
 
 /* ---------------- state ---------------- */
 let state = {
-  members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [], settlements: [],
+  members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [], settlements: [], debts: [],
   settings: {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0, budgetByCategory:{}, cycleStartDay:1},
   page: 'dashboard',
   memberId: localStorage.getItem(MEMBER_KEY) || null,
@@ -692,7 +692,7 @@ function saveLocalSnapshot(){
     localStorage.setItem(LOCAL_KEY, JSON.stringify({
       members:state.members, items:state.items, movements:state.movements,
       bills:state.bills, reminders:state.reminders, settings:state.settings,
-      closedCycles:state.closedCycles, settlements:state.settlements
+      closedCycles:state.closedCycles, settlements:state.settlements, debts:state.debts
     }));
   }catch(e){}
 }
@@ -816,6 +816,10 @@ function subscribeAll(){
   }, ()=>{});
   db.collection('settlements').onSnapshot(snap=>{
     state.settlements = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+    render();
+  }, ()=>{});
+  db.collection('debts').onSnapshot(snap=>{
+    state.debts = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
     render();
   }, ()=>{});
   db.doc('settings/config').onSnapshot(snap=>{
@@ -1847,32 +1851,95 @@ function pageCuentas(){
   const gran = state.gastosGranularity || 'mensual';
   const keys = allPeriodKeys(gran).reverse();
   const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
-  const tab = state.cuentasTab==='saldos' ? 'saldos' : 'gastos';
+  const tab = state.cuentasTab==='saldos' ? 'saldos' : state.cuentasTab==='deudas' ? 'deudas' : 'gastos';
   const rows = allExpenseRows().filter(r=>periodKeyFor(r.date, gran)===activeCycle);
   const total = rows.reduce((s,r)=>s+r.amount,0);
+  // Las deudas internas (préstamos entre integrantes pagados a abonos) viven aquí pero
+  // NO son un gasto de la casa: es dinero que ya se había gastado antes y solo se está
+  // regresando entre ustedes, así que no tienen ciclo ni cuentan en "Gastos" ni en el saldo.
+  const activeDebts = state.debts.filter(d=>!isDebtSettled(d));
+  const titleByTab = {gastos:'Gastos', saldos:'Saldo entre integrantes', deudas:'Deudas internas'};
+  const subByTab = {
+    gastos: rows.length+' movimiento(s) · total '+fmtMoney(total),
+    saldos: 'Reparto justo del gasto de '+cap(periodLabel(activeCycle, gran)),
+    deudas: activeDebts.length+' deuda(s) activa(s)'
+  };
   return `
     <div class="topbar">
       <div>
         <div class="page-eyebrow">Cuentas</div>
-        <h1 class="page-title">${tab==='gastos'?'Gastos':'Saldo entre integrantes'}</h1>
-        <div class="page-sub">${tab==='gastos' ? rows.length+' movimiento(s) · total '+fmtMoney(total) : 'Reparto justo del gasto de '+cap(periodLabel(activeCycle, gran))}</div>
+        <h1 class="page-title">${titleByTab[tab]}</h1>
+        <div class="page-sub">${subByTab[tab]}</div>
       </div>
       <div class="topbar-actions">
+        ${tab!=='deudas' ? `
         <div class="tabs">
           <div class="tab ${gran==='mensual'?'active':''}" onclick="App.setGastosGranularity('mensual')">Mensual</div>
           <div class="tab ${gran==='quincenal'?'active':''}" onclick="App.setGastosGranularity('quincenal')">Quincenal</div>
         </div>
         <select class="btn" style="font-weight:600" onchange="App.setGastosCycle(this.value)">
           ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(periodLabel(k, gran))}</option>`).join('')}
-        </select>
+        </select>` : ''}
         ${tab==='gastos' ? `<button class="btn btn-primary" onclick="App.openManualExpense()">${icon('plus')} Gasto manual</button>` : ''}
+        ${tab==='deudas' ? `<button class="btn btn-primary" onclick="App.openDebtForm(null)">${icon('plus')} Nueva deuda</button>` : ''}
       </div>
     </div>
     <div class="tabs" style="margin-bottom:10px;">
       <div class="tab ${tab==='gastos'?'active':''}" onclick="App.setCuentasTab('gastos')">Gastos</div>
       <div class="tab ${tab==='saldos'?'active':''}" onclick="App.setCuentasTab('saldos')">Saldo entre integrantes</div>
+      <div class="tab ${tab==='deudas'?'active':''}" onclick="App.setCuentasTab('deudas')">Deudas internas</div>
     </div>
-    ${tab==='gastos' ? gastosBody(rows, total) : saldosBody(activeCycle, gran)}
+    ${tab==='gastos' ? gastosBody(rows, total) : tab==='saldos' ? saldosBody(activeCycle, gran) : deudasBody()}
+  `;
+}
+
+/* ---------------- Deudas internas (viven dentro de "Cuentas") ---------------- */
+function debtPaidTotal(d){ return (d.payments||[]).reduce((s,p)=>s+(Number(p.amount)||0), 0); }
+function isDebtSettled(d){ return debtPaidTotal(d) >= (Number(d.totalAmount)||0) - 0.5; }
+function debtRowHtml(d){
+  const paid = debtPaidTotal(d);
+  const total = Number(d.totalAmount)||0;
+  const remaining = Math.max(0, total-paid);
+  const pct = total>0 ? Math.min(100, paid/total*100) : 0;
+  const settled = isDebtSettled(d);
+  const content = `
+    <div class="${settled?'':'swipe-content '}list-item">
+      <div class="list-icon" style="${settled?'background:var(--good-soft);color:var(--good);':''}">${icon(settled?'check':'wallet')}</div>
+      <div class="list-main">
+        <div class="list-title">${esc(d.name)}${settled?' <span class="badge badge-good" style="margin-left:6px;">Saldada</span>':''}</div>
+        <div class="list-sub">${esc(d.fromName||'—')} le debe a ${esc(d.toName||'—')} · ${settled?'cubierto por completo':fmtMoney(remaining)+' por cubrir'}</div>
+        <div class="progress" style="margin-top:7px; max-width:260px;"><span style="width:${pct}%; ${settled?'background:var(--good);':''}"></span></div>
+      </div>
+      <div class="list-end" style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+        <span style="font-weight:700;">${fmtMoney(paid)} <span style="font-weight:400;color:var(--ink-faint);font-size:11px;">de ${fmtMoney(total)}</span></span>
+        <div style="display:flex; gap:4px;">
+          <button class="btn btn-sm btn-ghost" onclick="App.openDebtHistory('${d.id}')" title="Ver abonos">${icon('chart')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.openDebtForm('${d.id}')" title="Editar">${icon('edit')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteDebt('${d.id}')" title="Eliminar">${icon('trash')}</button>
+        </div>
+      </div>
+    </div>`;
+  if(settled) return content; // ya saldada: no hay nada que abonar, así que no lleva swipe
+  return `<div class="swipe-row">
+    <div class="swipe-action swipe-action-left" onclick="App.confirmDeleteDebt('${d.id}')">${icon('trash')}<span>Eliminar</span></div>
+    <div class="swipe-action swipe-action-right" onclick="App.openDebtPayment('${d.id}')">${icon('plus')}<span>Abonar</span></div>
+    ${content}
+  </div>`;
+}
+function deudasBody(){
+  const all = state.debts.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+  const active = all.filter(d=>!isDebtSettled(d));
+  const settled = all.filter(d=>isDebtSettled(d));
+  return `
+    <div class="panel">
+      <div class="panel-body pad0">
+        ${active.length ? `<div class="swipe-list">${active.map(debtRowHtml).join('')}</div>` : emptyBlock('wallet', 'No hay deudas internas activas. Agrega la primera con "Nueva deuda".')}
+      </div>
+    </div>
+    ${settled.length ? `<div class="panel" style="margin-top:14px; opacity:.75;">
+      <div class="panel-header"><div class="panel-title">Saldadas</div></div>
+      <div class="panel-body pad0"><div class="swipe-list">${settled.map(debtRowHtml).join('')}</div></div>
+    </div>` : ''}
   `;
 }
 
@@ -2382,6 +2449,68 @@ function modalEditBillPayment(billId, idx){
   `);
 }
 
+function modalDebtForm(id){
+  const d = id ? state.debts.find(x=>x.id===id) : null;
+  const members = state.members.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  openModal(`
+    <div class="modal-header"><h3>${d?'Editar deuda':'Nueva deuda interna'}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="field"><label>¿De qué se trata?</label><input id="dbName" placeholder="Ej. Préstamo cocina nueva" value="${d?esc(d.name):''}"></div>
+      <div class="field-row">
+        <div class="field"><label>¿Quién debe?</label>
+          <select id="dbFrom">
+            <option value="">— Elegir —</option>
+            ${members.map(m=>`<option value="${m.id}" ${d&&d.fromId===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>¿A quién se le debe?</label>
+          <select id="dbTo">
+            <option value="">— Elegir —</option>
+            ${members.map(m=>`<option value="${m.id}" ${d&&d.toId===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Monto total de la deuda (MXN)</label><input id="dbTotal" type="number" step="any" min="0" value="${d?Number(d.totalAmount)||0:''}"></div>
+      <div class="field"><label>Fecha de inicio</label><input id="dbDate" type="date" value="${d?(d.startDate||todayISO()):todayISO()}"></div>
+      ${!d ? `<div class="field"><label>¿Ya le han abonado algo? (opcional)</label><input id="dbInitialPaid" type="number" step="any" min="0" placeholder="0"></div>` : ''}
+    </div>
+    <div class="modal-foot">
+      ${d?`<button class="btn btn-danger" onclick="App.confirmDeleteDebt('${d.id}')">Eliminar</button>`:''}
+      <button class="btn btn-primary" onclick="App.saveDebt(${d?`'${d.id}'`:'null'})">Guardar</button>
+    </div>
+  `);
+}
+function modalDebtPayment(id){
+  const d = state.debts.find(x=>x.id===id);
+  if(!d) return;
+  const remaining = Math.max(0, (Number(d.totalAmount)||0) - debtPaidTotal(d));
+  openModal(`
+    <div class="modal-header"><h3>Registrar abono · ${esc(d.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="page-sub" style="margin:-4px 0 2px;">Falta ${fmtMoney(remaining)} por cubrir.</div>
+      <div class="field"><label>Monto del abono (MXN)</label><input id="dpAmount" type="number" step="any" min="0" value="${remaining}"></div>
+      <div class="field"><label>Fecha</label><input id="dpDate" type="date" value="${todayISO()}"></div>
+      <div class="field"><label>Nota (opcional)</label><input id="dpNote" placeholder="Ej. abono de octubre"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveDebtPayment('${id}')">Registrar abono</button></div>
+  `);
+}
+function modalDebtHistory(id){
+  const d = state.debts.find(x=>x.id===id);
+  if(!d) return;
+  const entries = (d.payments||[]).map((p,i)=>Object.assign({_idx:i}, p)).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
+  openModal(`
+    <div class="modal-header"><h3>Abonos · ${esc(d.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body" style="padding:0;">
+      ${entries.length ? entries.map(p=>`<div class="list-item">
+        <div class="list-icon">${icon('cash')}</div>
+        <div class="list-main"><div class="list-title">${fmtMoney(Number(p.amount)||0)}</div><div class="list-sub">${fmtDate(p.date)}${p.note?' · '+esc(p.note):''}</div></div>
+        <div class="list-end"><button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteDebtPayment('${id}', ${p._idx})" title="Eliminar">${icon('trash')}</button></div>
+      </div>`).join('') : `<div style="padding:16px;">${emptyBlock('cash','Todavía no hay abonos registrados.')}</div>`}
+    </div>
+  `);
+}
+
 function modalReminderForm(){
   openModal(`
     <div class="modal-header"><h3>Nuevo recordatorio</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
@@ -2780,6 +2909,59 @@ window.App = {
     }
   },
 
+  openDebtForm(id){ modalDebtForm(id); },
+  async saveDebt(id){
+    const name = document.getElementById('dbName').value.trim();
+    const fromId = document.getElementById('dbFrom').value || null;
+    const toId = document.getElementById('dbTo').value || null;
+    const totalAmount = Number(document.getElementById('dbTotal').value)||0;
+    const startDate = document.getElementById('dbDate').value || todayISO();
+    if(!name){ toast('Ponle un nombre a la deuda'); return; }
+    if(!totalAmount){ toast('Pon el monto total de la deuda'); return; }
+    const fromM = fromId ? state.members.find(m=>m.id===fromId) : null;
+    const toM = toId ? state.members.find(m=>m.id===toId) : null;
+    const data = {name, fromId, fromName: fromM?fromM.name:'—', toId, toName: toM?toM.name:'—', totalAmount, startDate};
+    if(id){
+      await Data.set('debts', id, data, true);
+    } else {
+      const initialPaidEl = document.getElementById('dbInitialPaid');
+      const initialPaid = initialPaidEl ? Number(initialPaidEl.value)||0 : 0;
+      const payments = initialPaid>0 ? [{amount:initialPaid, date:startDate, note:'Abono inicial al registrar la deuda'}] : [];
+      await Data.add('debts', Object.assign(data, {payments}));
+    }
+    closeModal(); toast('Deuda guardada'); render();
+  },
+  confirmDeleteDebt(id){ if(confirm('¿Eliminar esta deuda y todo su historial de abonos? Esta acción no se puede deshacer.')){ Data.del('debts', id); closeModal(); toast('Deuda eliminada'); } },
+  openDebtPayment(id){ modalDebtPayment(id); },
+  async saveDebtPayment(id){
+    const d = state.debts.find(x=>x.id===id);
+    if(!d) return;
+    const amount = Number(document.getElementById('dpAmount').value)||0;
+    const date = document.getElementById('dpDate').value || todayISO();
+    const note = document.getElementById('dpNote').value.trim();
+    if(!amount){ toast('Pon el monto del abono'); return; }
+    const payments = (d.payments||[]).concat([{amount, date, note}]);
+    const newPaid = payments.reduce((s,p)=>s+(Number(p.amount)||0), 0);
+    await Data.set('debts', id, {payments}, true);
+    closeModal();
+    toast(newPaid >= (Number(d.totalAmount)||0)-0.5 ? '¡Deuda saldada! Se movió a Saldadas' : 'Abono registrado');
+    render();
+  },
+  openDebtHistory(id){ modalDebtHistory(id); },
+  async confirmDeleteDebtPayment(debtId, idx){
+    const d = state.debts.find(x=>x.id===debtId);
+    if(!d) return;
+    const p = (d.payments||[])[idx];
+    const label = p ? `${fmtMoney(Number(p.amount)||0)} del ${fmtDate(p.date)}` : 'este abono';
+    if(confirm(`¿Eliminar el abono de ${label}?`)){
+      const payments = (d.payments||[]).slice();
+      payments.splice(idx,1);
+      await Data.set('debts', debtId, {payments}, true);
+      toast('Abono eliminado'); render();
+      modalDebtHistory(debtId);
+    }
+  },
+
   openReminderForm(){ modalReminderForm(); },
   async saveReminder(){
     const title = document.getElementById('rmTitle').value.trim();
@@ -2841,7 +3023,7 @@ window.App = {
     downloadFile('gastos_casa.csv', csv);
   },
   exportJSON(){
-    const payload = JSON.stringify({members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings, closedCycles:state.closedCycles, settlements:state.settlements}, null, 2);
+    const payload = JSON.stringify({members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings, closedCycles:state.closedCycles, settlements:state.settlements, debts:state.debts}, null, 2);
     downloadFile('respaldo_casa.json', payload);
   },
 
