@@ -258,6 +258,17 @@
   .list-title{font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .list-sub{font-size:11.5px; color:var(--ink-faint);}
   .list-end{text-align:right; flex:none;}
+  /* ---- Listas con gesto de swipe (Inventario, Gastos, Recordatorios) ---- */
+  .swipe-list{display:flex; flex-direction:column;}
+  .list-group-label{padding:14px 4px 6px; font-weight:700; font-size:11.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.04em;}
+  .swipe-row{position:relative; overflow:hidden;}
+  .swipe-row .swipe-content{position:relative; z-index:2; background:var(--surface); touch-action:pan-y; will-change:transform; transition:transform .22s cubic-bezier(.2,.7,.3,1);}
+  .swipe-action{position:absolute; top:0; bottom:0; width:66px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; font-weight:700; color:#fff; z-index:1; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .15s ease; text-align:center;}
+  .swipe-action svg{width:17px; height:17px;}
+  .swipe-action-left{left:0; background:var(--bad);}
+  .swipe-action-right{right:0; background:var(--accent);}
+  .swipe-row.swipe-open-left .swipe-action-left, .swipe-row.swipe-open-right .swipe-action-right{opacity:1; pointer-events:auto;}
+  .row-actions-wrap{display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; max-width:230px;}
 
   .member-row{display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); transition:background .12s ease;}
   .member-row:last-child{border-bottom:none;}
@@ -1538,6 +1549,75 @@ function matchesSearch(it){
   if(!state.invSearch) return true;
   return (it.name||'').toLowerCase().includes(state.invSearch.toLowerCase());
 }
+
+/* ---------------- Gestos de swipe en listas (dedo en celular, arrastrar con mouse en escritorio) ----------------
+   Patrón: deslizar la fila hacia la DERECHA revela una acción roja a la izquierda ("Eliminar");
+   deslizar hacia la IZQUIERDA revela una acción de acento a la derecha ("Registrar algo").
+   El swipe solo REVELA el botón — todavía hay que tocarlo para que la acción se ejecute,
+   así se evitan borrados accidentales por un arrastre torpe. */
+const SWIPE_REVEAL = 66;    // px que se revela cada acción al abrir (= ancho del botón de acción)
+const SWIPE_THRESHOLD = 36; // px mínimos de arrastre para que, al soltar, quede abierta
+let swipeOpenRow = null;
+function closeSwipeRow(row){
+  if(!row) return;
+  row.classList.remove('swipe-open-left','swipe-open-right');
+  const content = row.querySelector('.swipe-content');
+  if(content) content.style.transform = '';
+  if(swipeOpenRow===row) swipeOpenRow = null;
+}
+function closeAllSwipeRows(except){
+  document.querySelectorAll('.swipe-row.swipe-open-left, .swipe-row.swipe-open-right').forEach(r=>{ if(r!==except) closeSwipeRow(r); });
+}
+function initSwipeRows(){
+  swipeOpenRow = null; // el render anterior ya reemplazó los nodos viejos
+  document.querySelectorAll('.swipe-row').forEach(row=>{
+    const content = row.querySelector('.swipe-content');
+    const actLeft = row.querySelector('.swipe-action-left');
+    const actRight = row.querySelector('.swipe-action-right');
+    if(!content || (!actLeft && !actRight)) return;
+    let startX=0, startY=0, dx=0, axisLocked=null, pointerId=null;
+    content.addEventListener('pointerdown', e=>{
+      if(e.pointerType==='mouse' && e.button!==0) return;
+      pointerId = e.pointerId; startX = e.clientX; startY = e.clientY; dx = 0; axisLocked = null;
+      content.style.transition = 'none';
+    });
+    content.addEventListener('pointermove', e=>{
+      if(pointerId===null || e.pointerId!==pointerId) return;
+      const diffX = e.clientX-startX, diffY = e.clientY-startY;
+      if(axisLocked===null){
+        if(Math.abs(diffX)<6 && Math.abs(diffY)<6) return;
+        axisLocked = Math.abs(diffX)>Math.abs(diffY) ? 'x' : 'y';
+        if(axisLocked==='x'){ try{ content.setPointerCapture(pointerId); }catch(err){} closeAllSwipeRows(row); }
+        else return;
+      }
+      if(axisLocked!=='x') return;
+      e.preventDefault();
+      let d = diffX;
+      if(d>0 && !actLeft) d = 0;
+      if(d<0 && !actRight) d = 0;
+      if(d>SWIPE_REVEAL) d = SWIPE_REVEAL + (d-SWIPE_REVEAL)*0.25;
+      if(d<-SWIPE_REVEAL) d = -SWIPE_REVEAL + (d+SWIPE_REVEAL)*0.25;
+      dx = d;
+      content.style.transform = `translateX(${dx}px)`;
+    });
+    function endDrag(e){
+      if(pointerId===null || e.pointerId!==pointerId) return;
+      content.style.transition = '';
+      if(axisLocked==='x'){
+        if(dx>=SWIPE_THRESHOLD && actLeft){ row.classList.add('swipe-open-left'); content.style.transform = `translateX(${SWIPE_REVEAL}px)`; swipeOpenRow = row; }
+        else if(dx<=-SWIPE_THRESHOLD && actRight){ row.classList.add('swipe-open-right'); content.style.transform = `translateX(${-SWIPE_REVEAL}px)`; swipeOpenRow = row; }
+        else closeSwipeRow(row);
+      }
+      pointerId = null; dx = 0; axisLocked = null;
+    }
+    content.addEventListener('pointerup', endDrag);
+    content.addEventListener('pointercancel', endDrag);
+  });
+}
+document.addEventListener('pointerdown', e=>{
+  if(swipeOpenRow && !swipeOpenRow.contains(e.target)) closeSwipeRow(swipeOpenRow);
+}, true);
+
 function inventoryTable(items){
   if(!items.length) return emptyBlock('box', 'No hay artículos aquí todavía. Agrega el primero con "Nuevo artículo".');
   const sortFn = (a,b)=>{
@@ -1561,31 +1641,33 @@ function inventoryTable(items){
     const low = !out && Number(it.minQty)>0 && Number(it.currentQty)<=Number(it.minQty);
     const badge = out ? `<span class="badge badge-bad"><span class="dot dot-bad"></span>Agotado</span>` : low ? `<span class="badge badge-warn"><span class="dot dot-warn"></span>Bajo</span>` : `<span class="badge badge-good"><span class="dot dot-good"></span>OK</span>`;
     const subBits = [it.brand?esc(it.brand):'', esc(it.unit||''), it.group?esc(it.group):''].filter(Boolean);
-    return `<tr>
-      <td><div class="row-title">${esc(it.name)}</div><div class="row-sub">${subBits.join(' · ')}</div></td>
-      <td class="num">${Number(it.currentQty)||0} ${esc(it.unit||'')}</td>
-      <td class="num">${Number(it.minQty)||0} ${esc(it.unit||'')}</td>
-      <td>${badge}</td>
-      <td class="row-sub">${it.updatedAt?fmtDate(it.updatedAt):'—'}</td>
-      <td style="text-align:right; white-space:nowrap;">
-        <button class="btn btn-sm ${it.shoppingFlag?'':'btn-ghost'}" style="${it.shoppingFlag?'background:var(--warn-soft);color:var(--warn);border-color:transparent;':''}" onclick="App.toggleShoppingFlag('${it.id}')" title="${it.shoppingFlag?'En la lista del súper — quitar':'Se está acabando: agregar a la lista del súper'}">${icon('cart')}</button>
-        <button class="btn btn-sm" onclick="App.openMovement('consumo','${it.id}')" title="Registrar consumo">${icon('basket')}</button>
-        <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')" title="Registrar compra">${icon('plus')}</button>
-        <button class="btn btn-sm btn-ghost" onclick="App.openPriceCompare('${it.id}')" title="Comparar precios entre tiendas">${icon('chart')}</button>
-        <button class="btn btn-sm btn-ghost" onclick="App.openItemForm('${it.id}')" title="Editar">${icon('edit')}</button>
-        <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteItem('${it.id}')" title="Eliminar">${icon('trash')}</button>
-      </td>
-    </tr>`;
+    const metaBits = [`${Number(it.currentQty)||0} ${esc(it.unit||'')} en existencia`, Number(it.minQty)>0?`mínimo ${Number(it.minQty)} ${esc(it.unit||'')}`:'', it.updatedAt?'últ. mov. '+fmtDate(it.updatedAt):''].filter(Boolean);
+    return `<div class="swipe-row">
+      <div class="swipe-action swipe-action-left" onclick="App.confirmDeleteItem('${it.id}')">${icon('trash')}<span>Eliminar</span></div>
+      <div class="swipe-action swipe-action-right" onclick="App.openMovement('compra','${it.id}')">${icon('plus')}<span>Comprar</span></div>
+      <div class="swipe-content list-item">
+        <div class="list-icon" style="${out?'background:var(--bad-soft);color:var(--bad);':low?'background:var(--warn-soft);color:var(--warn);':''}">${icon('basket')}</div>
+        <div class="list-main">
+          <div class="list-title">${esc(it.name)} ${badge}</div>
+          <div class="list-sub">${[...subBits, ...metaBits].join(' · ')}</div>
+        </div>
+        <div class="list-end row-actions-wrap">
+          <button class="btn btn-sm ${it.shoppingFlag?'':'btn-ghost'}" style="${it.shoppingFlag?'background:var(--warn-soft);color:var(--warn);border-color:transparent;':''}" onclick="App.toggleShoppingFlag('${it.id}')" title="${it.shoppingFlag?'En la lista del súper — quitar':'Se está acabando: agregar a la lista del súper'}">${icon('cart')}</button>
+          <button class="btn btn-sm" onclick="App.openMovement('consumo','${it.id}')" title="Registrar consumo">${icon('basket')}</button>
+          <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')" title="Registrar compra">${icon('plus')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.openPriceCompare('${it.id}')" title="Comparar precios entre tiendas">${icon('chart')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.openItemForm('${it.id}')" title="Editar">${icon('edit')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteItem('${it.id}')" title="Eliminar">${icon('trash')}</button>
+        </div>
+      </div>
+    </div>`;
   };
-  return `<div class="table-scroll"><table>
-    <thead><tr><th>Artículo</th><th>Existencia</th><th>Mínimo</th><th>Estado</th><th>Último movimiento</th><th></th></tr></thead>
-    <tbody>
+  return `<div class="swipe-list">
     ${groupKeys.map(loc=>`
-      <tr><td colspan="6" style="padding:10px 14px 6px; font-weight:700; font-size:12px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.03em; border-bottom:none;">${esc(loc)}</td></tr>
+      <div class="list-group-label">${esc(loc)}</div>
       ${groups[loc].slice().sort(sortFn).map(rowHtml).join('')}
     `).join('')}
-    </tbody>
-  </table></div>`;
+  </div>`;
 }
 
 /* ---------------- PAGE: servicios ---------------- */
@@ -1635,21 +1717,36 @@ function billCard(b){
 }
 
 /* ---------------- PAGE: gastos ---------------- */
+function gastosRowHtml(r){
+  const cat = CATS[r.category]||{};
+  const canSwipe = r.source==='movement'; // los pagos de servicio se editan/eliminan desde su propio historial
+  const editBtn = r.source==='movement'
+    ? `<button class="btn btn-sm btn-ghost" onclick="App.openEditMovement('${r.ref.id}')" title="Editar">${icon('edit')}</button>`
+    : `<button class="btn btn-sm btn-ghost" onclick="App.openBillHistory('${r.ref.id}')" title="Editar pago de servicio">${icon('edit')}</button>`;
+  const content = `
+    <div class="${canSwipe?'swipe-content ':''}list-item">
+      <div class="list-icon" style="background:${hexSoft(cat.color||'#999')};color:${cat.color||'#666'};">${icon(cat.icon||'dots')}</div>
+      <div class="list-main">
+        <div class="list-title">${esc(r.name)}</div>
+        <div class="list-sub">${fmtDate(r.date)} · ${cat.label||r.category}${r.memberName?' · '+esc(r.memberName):''}</div>
+      </div>
+      <div class="list-end" style="display:flex; align-items:center; gap:10px;">
+        <span style="font-weight:700;">${fmtMoney(r.amount)}</span>
+        ${editBtn}
+      </div>
+    </div>`;
+  if(!canSwipe) return content;
+  return `<div class="swipe-row">
+    <div class="swipe-action swipe-action-left" onclick="App.confirmDeleteMovement('${r.ref.id}')">${icon('trash')}<span>Eliminar</span></div>
+    <div class="swipe-action swipe-action-right" onclick="App.duplicateMovement('${r.ref.id}')">${icon('cycle')}<span>Repetir</span></div>
+    ${content}
+  </div>`;
+}
 function gastosBody(rows, total){
   return `
     <div class="panel">
       <div class="panel-body pad0">
-        ${rows.length ? `<div class="table-scroll"><table>
-          <thead><tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th>Quién</th><th>Monto</th><th></th></tr></thead>
-          <tbody>${rows.map(r=>`<tr>
-            <td class="row-sub">${fmtDate(r.date)}</td>
-            <td><span class="badge" style="background:${hexSoft((CATS[r.category]||{}).color||'#999')};color:${(CATS[r.category]||{}).color||'#666'}">${(CATS[r.category]||{}).label||r.category}</span></td>
-            <td>${esc(r.name)}</td>
-            <td class="row-sub">${esc(r.memberName||'—')}</td>
-            <td class="num">${fmtMoney(r.amount)}</td>
-            <td style="text-align:right; white-space:nowrap;">${r.source==='movement' ? `<button class="btn btn-sm btn-ghost" onclick="App.openEditMovement('${r.ref.id}')" title="Editar">${icon('edit')}</button>` : `<button class="btn btn-sm btn-ghost" onclick="App.openBillHistory('${r.ref.id}')" title="Editar pago de servicio">${icon('edit')}</button>`}</td>
-          </tr>`).join('')}</tbody>
-        </table></div>` : emptyBlock('cash', 'Sin gastos en este ciclo todavía.')}
+        ${rows.length ? `<div class="swipe-list">${rows.map(gastosRowHtml).join('')}</div>` : emptyBlock('cash', 'Sin gastos en este ciclo todavía.')}
       </div>
     </div>
   `;
@@ -1801,17 +1898,25 @@ function pageRecordatorios(){
 function reminderRow(r){
   const d = daysBetween(todayISO(), r.dueDate||todayISO());
   const overdue = d<0 && !r.done;
-  return `<div class="list-item">
-    <div class="list-icon" style="color:${overdue?'var(--bad)':'var(--ink-soft)'}">${icon(r.kind==='bill'?'bolt':r.kind==='stock'?'basket':'bell')}</div>
-    <div class="list-main">
-      <div class="list-title" style="${r.done?'text-decoration:line-through;color:var(--ink-faint)':''}">${esc(r.title)}</div>
-      <div class="list-sub">${r.dueDate?fmtDate(r.dueDate):'Sin fecha'}${r.auto?' · automático':''}</div>
-    </div>
-    <div class="list-end">
-      ${r.auto ? (r.kind==='bill'?`<button class="btn btn-sm btn-primary" onclick="App.openPayBill('${r.ref.id}')">Pagar</button>`:`<button class="btn btn-sm" onclick="App.openMovement('compra','${r.ref.id}')">Reponer</button>`)
-        : r.done ? `<button class="btn btn-sm btn-ghost" onclick="App.toggleReminder('${r.id}',false)">Reabrir</button>`
-        : `<button class="btn btn-sm btn-primary" onclick="App.toggleReminder('${r.id}',true)">${icon('check')}</button>`}
-    </div>
+  const canSwipe = !r.auto && !r.done; // los automáticos (servicio/stock) y los ya completados no se borran por swipe
+  const content = `
+    <div class="${canSwipe?'swipe-content ':''}list-item">
+      <div class="list-icon" style="color:${overdue?'var(--bad)':'var(--ink-soft)'}">${icon(r.kind==='bill'?'bolt':r.kind==='stock'?'basket':'bell')}</div>
+      <div class="list-main">
+        <div class="list-title" style="${r.done?'text-decoration:line-through;color:var(--ink-faint)':''}">${esc(r.title)}</div>
+        <div class="list-sub">${r.dueDate?fmtDate(r.dueDate):'Sin fecha'}${r.auto?' · automático':''}</div>
+      </div>
+      <div class="list-end">
+        ${r.auto ? (r.kind==='bill'?`<button class="btn btn-sm btn-primary" onclick="App.openPayBill('${r.ref.id}')">Pagar</button>`:`<button class="btn btn-sm" onclick="App.openMovement('compra','${r.ref.id}')">Reponer</button>`)
+          : r.done ? `<button class="btn btn-sm btn-ghost" onclick="App.toggleReminder('${r.id}',false)">Reabrir</button>`
+          : `<button class="btn btn-sm btn-primary" onclick="App.toggleReminder('${r.id}',true)">${icon('check')}</button>`}
+      </div>
+    </div>`;
+  if(!canSwipe) return content;
+  return `<div class="swipe-row">
+    <div class="swipe-action swipe-action-left" onclick="App.confirmDeleteReminder('${r.id}')">${icon('trash')}<span>Eliminar</span></div>
+    <div class="swipe-action swipe-action-right" onclick="App.toggleReminder('${r.id}',true)">${icon('check')}<span>Hecho</span></div>
+    ${content}
   </div>`;
 }
 
@@ -2553,6 +2658,22 @@ window.App = {
       Data.del('movements', id); closeModal(); toast('Gasto eliminado'); render();
     }
   },
+  async duplicateMovement(id){
+    // Gesto de swipe "Repetir": registra de nuevo la misma compra (mismo artículo, costo
+    // y cantidad) con la fecha de hoy — igual que si se diera de alta a mano desde cero.
+    const m = state.movements.find(x=>x.id===id);
+    if(!m) return;
+    const item = state.items.find(i=>i.id===m.itemId);
+    const date = todayISO();
+    if(item){
+      await Data.set('items', item.id, {currentQty: Number(item.currentQty||0)+Number(m.qty||0), updatedAt:date, shoppingFlag:false, shoppingFlagBy:null, shoppingFlagAt:null}, true);
+    }
+    await Data.add('movements', {
+      itemId:m.itemId, itemName:m.itemName, category:m.category, type:'compra', qty:m.qty, unitCost:m.unitCost,
+      total:m.total, date, memberId:m.memberId, memberName:m.memberName, note:m.note||'', store:m.store||''
+    });
+    toast('Se registró otra vez ese gasto, con la fecha de hoy'); render();
+  },
 
   openBillForm(id){ modalBillForm(id); },
   async saveBill(id){
@@ -2630,6 +2751,7 @@ window.App = {
     closeModal(); toast('Recordatorio agregado'); render();
   },
   async toggleReminder(id, done){ await Data.set('reminders', id, {done}, true); render(); },
+  confirmDeleteReminder(id){ if(confirm('¿Eliminar este recordatorio?')){ Data.del('reminders', id); closeModal(); toast('Recordatorio eliminado'); } },
 
   async confirmCloseCycle(cycleKey){
     if(state.closedCycles.find(c=>c.id===cycleKey || c.cycleKey===cycleKey)){ toast('Ese ciclo ya está cerrado'); return; }
@@ -2703,6 +2825,7 @@ async function downloadFile(filename, data){
 
 afterRenderHook = function(){
   if(state.page==='dashboard'){ requestAnimationFrame(drawCharts); }
+  initSwipeRows();
 };
 
 boot();
