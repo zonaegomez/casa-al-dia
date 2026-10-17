@@ -401,6 +401,14 @@ const CATS = {
 };
 const INVENTORY_CATS = ['despensa','limpieza','higiene','insumos'];
 const UNITS = ['pza','kg','g','L','ml','paquete','rollo','bolsa','caja'];
+// Ubicación física dentro de la casa (independiente de la categoría de gasto),
+// para poder organizar y guardar el inventario por cuarto/piso.
+const LOCATIONS = ['Cocina','Sala/Comedor','Cuarto de lavado','Patio','Baños','Estudio','Sala de entretenimiento','Terraza chica','Terraza grande'];
+// Sugerencias de "grupo" (aisle/tipo de producto) — campo libre, pensado sobre
+// todo para Despensa/Cocina, útil para organizar la lista del súper por pasillo.
+const GROUP_SUGGESTIONS = ['Condimentos','Cereales y granos','Carnes y embutidos','Pastas','Lácteos','Bebidas','Panadería','Frutas y verduras','Limpieza de cocina','Papelería','Snacks','Café y té'];
+// Sugerencias de tienda, para poder comparar precios del mismo artículo entre tiendas.
+const STORE_SUGGESTIONS = ['HEB','Walmart','Soriana','Costco','Chedraui','Bodega Aurrera'];
 const BILL_SUBTYPES = ['Luz (CFE)','Agua','Gas LP / Natural','Internet','Telefonía','Streaming','Predial','Mantenimiento','Otro'];
 const CYCLE_MONTHS = {mensual:1, bimestral:2, trimestral:3, anual:12};
 const MEMBER_COLORS = ['#3E6DF6','#EC4899','#8B5CF6','#0EA5B7','#F59E0B','#22C55E','#EF4444','#F97316'];
@@ -1242,31 +1250,44 @@ function pageShoppingList(){
     </div>
   `;
 }
+function shoppingItemHtml(r){
+  const it = r.item;
+  const cat = CATS[it.category] || {label:cap(it.category||'otro'), color:'var(--ink-faint)', icon:'dots'};
+  const statusBadge = r.out ? `<span class="badge badge-bad"><span class="dot dot-bad"></span>Agotado</span>`
+    : r.low ? `<span class="badge badge-warn"><span class="dot dot-warn"></span>Bajo</span>`
+    : `<span class="badge" style="background:${hexSoft(cat.color)}; color:${cat.color}"><span class="dot" style="background:${cat.color}"></span>${esc(cat.label)}</span>`;
+  const qtyNote = it.minQty ? `Quedan ${Number(it.currentQty)||0} ${esc(it.unit||'')} · mínimo ${it.minQty} ${esc(it.unit||'')}` : (cat.label||'');
+  const flagNote = r.flagged ? `<div class="list-sub">Marcado por ${esc(it.shoppingFlagBy||'alguien')}${it.shoppingFlagAt?' · '+fmtDate(it.shoppingFlagAt):''}</div>` : '';
+  const brandNote = it.brand ? `<div class="list-sub" style="font-weight:700; color:var(--accent-strong);">✓ Marca correcta: ${esc(it.brand)}</div>` : '';
+  return `<div class="list-item">
+    <div class="list-icon">${icon(cat.icon||'cart')}</div>
+    <div class="list-main">
+      <div class="list-title">${esc(it.name)}</div>
+      <div class="list-sub">${esc(qtyNote)}</div>
+      ${brandNote}
+      ${flagNote}
+    </div>
+    <div class="list-end" style="display:flex; align-items:center; gap:6px;">
+      ${statusBadge}
+      <button class="btn btn-sm btn-ghost" onclick="App.toggleShoppingFlag('${it.id}')" title="Quitar de la lista del súper">${icon('x')}</button>
+      <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')">Comprado</button>
+    </div>
+  </div>`;
+}
 function renderShoppingList(rows){
-  return rows.map(r=>{
-    const it = r.item;
-    const cat = CATS[it.category] || {label:cap(it.category||'otro'), color:'var(--ink-faint)', icon:'dots'};
-    const statusBadge = r.out ? `<span class="badge badge-bad"><span class="dot dot-bad"></span>Agotado</span>`
-      : r.low ? `<span class="badge badge-warn"><span class="dot dot-warn"></span>Bajo</span>`
-      : `<span class="badge" style="background:${hexSoft(cat.color)}; color:${cat.color}"><span class="dot" style="background:${cat.color}"></span>${esc(cat.label)}</span>`;
-    const qtyNote = it.minQty ? `Quedan ${Number(it.currentQty)||0} ${esc(it.unit||'')} · mínimo ${it.minQty} ${esc(it.unit||'')}` : (cat.label||'');
-    const flagNote = r.flagged ? `<div class="list-sub">Marcado por ${esc(it.shoppingFlagBy||'alguien')}${it.shoppingFlagAt?' · '+fmtDate(it.shoppingFlagAt):''}</div>` : '';
-    const brandNote = it.brand ? `<div class="list-sub" style="font-weight:700; color:var(--accent-strong);">✓ Marca correcta: ${esc(it.brand)}</div>` : '';
-    return `<div class="list-item">
-      <div class="list-icon">${icon(cat.icon||'cart')}</div>
-      <div class="list-main">
-        <div class="list-title">${esc(it.name)}</div>
-        <div class="list-sub">${esc(qtyNote)}</div>
-        ${brandNote}
-        ${flagNote}
-      </div>
-      <div class="list-end" style="display:flex; align-items:center; gap:6px;">
-        ${statusBadge}
-        <button class="btn btn-sm btn-ghost" onclick="App.toggleShoppingFlag('${it.id}')" title="Quitar de la lista del súper">${icon('x')}</button>
-        <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')">Comprado</button>
-      </div>
-    </div>`;
-  }).join('');
+  // Agrupamos por "grupo" (pasillo del súper, ej. Condimentos, Lácteos) para que
+  // la lista se pueda recorrer tienda-por-pasillo; si un artículo no tiene grupo
+  // asignado, cae bajo su categoría como respaldo.
+  const groups = {};
+  rows.forEach(r=>{
+    const g = (r.item.group||'').trim() || (CATS[r.item.category]?CATS[r.item.category].label:cap(r.item.category||'Otros'));
+    (groups[g] = groups[g]||[]).push(r);
+  });
+  const groupNames = Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  return groupNames.map(g=>`
+    <div style="padding:10px 14px 2px; font-weight:700; font-size:12px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.03em;">${esc(g)}</div>
+    ${groups[g].map(shoppingItemHtml).join('')}
+  `).join('');
 }
 
 /* ---------------- PAGE: inventory (despensa / insumos) ---------------- */
@@ -1327,34 +1348,50 @@ function matchesSearch(it){
 }
 function inventoryTable(items){
   if(!items.length) return emptyBlock('box', 'No hay artículos aquí todavía. Agrega el primero con "Nuevo artículo".');
-  items = items.slice().sort((a,b)=>{
+  const sortFn = (a,b)=>{
     const aFlagged = Number(a.minQty)>0 && Number(a.currentQty)<=Number(a.minQty) || !!a.shoppingFlag;
     const bFlagged = Number(b.minQty)>0 && Number(b.currentQty)<=Number(b.minQty) || !!b.shoppingFlag;
     if(aFlagged!==bFlagged) return aFlagged?-1:1;
     return (a.name||'').localeCompare(b.name||'');
+  };
+  // Agrupamos por ubicación física (Cocina, Baños, Estudio, etc.) para que el
+  // inventario refleje cómo está organizada la casa, no solo el tipo de gasto.
+  const NO_LOC = 'Sin ubicación asignada';
+  const groups = {};
+  items.forEach(it=>{
+    const loc = it.location || NO_LOC;
+    (groups[loc] = groups[loc]||[]).push(it);
   });
+  const locOrder = LOCATIONS.concat([NO_LOC]);
+  const groupKeys = Object.keys(groups).sort((a,b)=> locOrder.indexOf(a)-locOrder.indexOf(b));
+  const rowHtml = it=>{
+    const out = Number(it.currentQty)<=0;
+    const low = !out && Number(it.minQty)>0 && Number(it.currentQty)<=Number(it.minQty);
+    const badge = out ? `<span class="badge badge-bad"><span class="dot dot-bad"></span>Agotado</span>` : low ? `<span class="badge badge-warn"><span class="dot dot-warn"></span>Bajo</span>` : `<span class="badge badge-good"><span class="dot dot-good"></span>OK</span>`;
+    const subBits = [it.brand?esc(it.brand):'', esc(it.unit||''), it.group?esc(it.group):''].filter(Boolean);
+    return `<tr>
+      <td><div class="row-title">${esc(it.name)}</div><div class="row-sub">${subBits.join(' · ')}</div></td>
+      <td class="num">${Number(it.currentQty)||0} ${esc(it.unit||'')}</td>
+      <td class="num">${Number(it.minQty)||0} ${esc(it.unit||'')}</td>
+      <td>${badge}</td>
+      <td class="row-sub">${it.updatedAt?fmtDate(it.updatedAt):'—'}</td>
+      <td style="text-align:right; white-space:nowrap;">
+        <button class="btn btn-sm ${it.shoppingFlag?'':'btn-ghost'}" style="${it.shoppingFlag?'background:var(--warn-soft);color:var(--warn);border-color:transparent;':''}" onclick="App.toggleShoppingFlag('${it.id}')" title="${it.shoppingFlag?'En la lista del súper — quitar':'Se está acabando: agregar a la lista del súper'}">${icon('cart')}</button>
+        <button class="btn btn-sm" onclick="App.openMovement('consumo','${it.id}')" title="Registrar consumo">${icon('basket')}</button>
+        <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')" title="Registrar compra">${icon('plus')}</button>
+        <button class="btn btn-sm btn-ghost" onclick="App.openPriceCompare('${it.id}')" title="Comparar precios entre tiendas">${icon('chart')}</button>
+        <button class="btn btn-sm btn-ghost" onclick="App.openItemForm('${it.id}')" title="Editar">${icon('edit')}</button>
+        <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteItem('${it.id}')" title="Eliminar">${icon('trash')}</button>
+      </td>
+    </tr>`;
+  };
   return `<div class="table-scroll"><table>
     <thead><tr><th>Artículo</th><th>Existencia</th><th>Mínimo</th><th>Estado</th><th>Último movimiento</th><th></th></tr></thead>
     <tbody>
-    ${items.map(it=>{
-      const out = Number(it.currentQty)<=0;
-      const low = !out && Number(it.minQty)>0 && Number(it.currentQty)<=Number(it.minQty);
-      const badge = out ? `<span class="badge badge-bad"><span class="dot dot-bad"></span>Agotado</span>` : low ? `<span class="badge badge-warn"><span class="dot dot-warn"></span>Bajo</span>` : `<span class="badge badge-good"><span class="dot dot-good"></span>OK</span>`;
-      return `<tr>
-        <td><div class="row-title">${esc(it.name)}</div><div class="row-sub">${it.brand?esc(it.brand)+' · ':''}${esc(it.unit||'')}</div></td>
-        <td class="num">${Number(it.currentQty)||0} ${esc(it.unit||'')}</td>
-        <td class="num">${Number(it.minQty)||0} ${esc(it.unit||'')}</td>
-        <td>${badge}</td>
-        <td class="row-sub">${it.updatedAt?fmtDate(it.updatedAt):'—'}</td>
-        <td style="text-align:right; white-space:nowrap;">
-          <button class="btn btn-sm ${it.shoppingFlag?'':'btn-ghost'}" style="${it.shoppingFlag?'background:var(--warn-soft);color:var(--warn);border-color:transparent;':''}" onclick="App.toggleShoppingFlag('${it.id}')" title="${it.shoppingFlag?'En la lista del súper — quitar':'Se está acabando: agregar a la lista del súper'}">${icon('cart')}</button>
-          <button class="btn btn-sm" onclick="App.openMovement('consumo','${it.id}')" title="Registrar consumo">${icon('basket')}</button>
-          <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')" title="Registrar compra">${icon('plus')}</button>
-          <button class="btn btn-sm btn-ghost" onclick="App.openItemForm('${it.id}')" title="Editar">${icon('edit')}</button>
-          <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteItem('${it.id}')" title="Eliminar">${icon('trash')}</button>
-        </td>
-      </tr>`;
-    }).join('')}
+    ${groupKeys.map(loc=>`
+      <tr><td colspan="6" style="padding:10px 14px 6px; font-weight:700; font-size:12px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.03em; border-bottom:none;">${esc(loc)}</td></tr>
+      ${groups[loc].slice().sort(sortFn).map(rowHtml).join('')}
+    `).join('')}
     </tbody>
   </table></div>`;
 }
@@ -1738,10 +1775,55 @@ function modalItemForm(id, defaultCat){
         <div class="field"><label>Existencia actual</label><input id="itQty" type="number" step="any" min="0" value="${it?it.currentQty:0}"></div>
         <div class="field"><label>Mínimo deseado</label><input id="itMin" type="number" step="any" min="0" value="${it?it.minQty:0}"></div>
       </div>
+      <div class="field-row">
+        <div class="field"><label>Ubicación (dónde se guarda/usa)</label>
+          <select id="itLocation">
+            <option value="" ${!it||!it.location?'selected':''}>— Sin ubicación —</option>
+            ${LOCATIONS.map(l=>`<option value="${esc(l)}" ${it&&it.location===l?'selected':''}>${esc(l)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Grupo (opcional, ej. pasillo del súper)</label>
+          <input id="itGroup" list="groupSuggestions" value="${it?esc(it.group||''):''}" placeholder="Ej. Condimentos">
+        </div>
+      </div>
+      <datalist id="groupSuggestions">${GROUP_SUGGESTIONS.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
     </div>
     <div class="modal-foot">
       ${it?`<button class="btn btn-danger" onclick="App.confirmDeleteItem('${it.id}')">Eliminar</button>`:''}
       <button class="btn btn-primary" onclick="App.saveItem('${id||''}')">Guardar</button>
+    </div>
+  `);
+}
+
+function modalPriceCompare(itemId){
+  const it = state.items.find(x=>x.id===itemId);
+  if(!it) return;
+  const purchases = state.movements.filter(m=>m.itemId===itemId && m.type==='compra' && Number(m.unitCost)>0);
+  const byStore = {};
+  purchases.forEach(m=>{
+    const store = (m.store||'').trim() || 'Sin tienda registrada';
+    (byStore[store] = byStore[store]||[]).push(m);
+  });
+  const summary = Object.keys(byStore).map(store=>{
+    const arr = byStore[store].slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const avg = arr.reduce((s,m)=>s+(Number(m.unitCost)||0),0)/arr.length;
+    return {store, avg, latest: Number(arr[0].unitCost)||0, latestDate: arr[0].date, n: arr.length};
+  }).sort((a,b)=>a.avg-b.avg);
+  openModal(`
+    <div class="modal-header"><h3>Comparar precios · ${esc(it.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      ${summary.length ? `
+      <div class="table-scroll"><table>
+        <thead><tr><th>Tienda</th><th>Último precio</th><th>Promedio</th><th>Compras</th></tr></thead>
+        <tbody>${summary.map((s,i)=>`<tr style="${i===0?'font-weight:700; color:var(--good);':''}">
+          <td>${esc(s.store)}</td>
+          <td class="num">${fmtMoneyPrecise(s.latest)}</td>
+          <td class="num">${fmtMoneyPrecise(s.avg)}</td>
+          <td class="num row-sub" style="color:inherit;">${s.n}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div class="page-sub" style="margin-top:10px;">Precio por ${esc(it.unit||'unidad')}. ${summary[0]?('Más barato, en promedio, en '+esc(summary[0].store)+'.'):''}</div>
+      ` : emptyBlock('cash','Todavía no hay compras de este artículo con tienda registrada. Captúrala la próxima vez que registres una compra o un ticket.')}
     </div>
   `);
 }
@@ -1762,7 +1844,9 @@ function modalMovement(type, itemId){
         ${isCompra?`<div class="field"><label>Costo total (MXN)</label><input id="mvCost" type="number" step="any" min="0" value="0"></div>`:''}
       </div>
       <div class="field"><label>Fecha</label><input id="mvDate" type="date" value="${todayISO()}"></div>
-      <div class="field"><label>Nota (opcional)</label><input id="mvNote" placeholder="Ej. Costco, oferta 2x1…"></div>
+      ${isCompra?`<div class="field"><label>Tienda (opcional)</label><input id="mvStore" list="storeSuggestions" placeholder="Ej. HEB"></div>`:''}
+      <div class="field"><label>Nota (opcional)</label><input id="mvNote" placeholder="Ej. oferta 2x1…"></div>
+      <datalist id="storeSuggestions">${STORE_SUGGESTIONS.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveMovement('${type}')">Guardar</button></div>
   `);
@@ -1806,7 +1890,11 @@ function modalTicket(prefillItemIds, scannedLines){
     <div class="modal-header"><h3>Ticket de compra</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
       ${scannedLines && scannedLines.length ? `<div class="page-sub" style="margin:-4px 0 2px;">Esto es lo que detectamos en la foto — revisa cada línea antes de guardar, sobre todo los precios.</div>` : ''}
-      <div class="field"><label>Fecha del ticket</label><input id="tkDate" type="date" value="${todayISO()}"></div>
+      <div class="field-row">
+        <div class="field"><label>Fecha del ticket</label><input id="tkDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Tienda (opcional)</label><input id="tkStore" list="storeSuggestions" placeholder="Ej. HEB"></div>
+      </div>
+      <datalist id="storeSuggestions">${STORE_SUGGESTIONS.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
       <div id="ticketRows">${rowsHtml}</div>
       <button class="btn btn-sm" style="margin-top:6px;" onclick="App.addTicketRow()">${icon('plus')} Agregar línea</button>
       <div style="display:flex; justify-content:flex-end; align-items:baseline; gap:8px; margin-top:14px; font-weight:700; font-size:16px;">Total del ticket <span id="tkTotal">${fmtMoney(0)}</span></div>
@@ -1988,6 +2076,8 @@ window.App = {
       unit: document.getElementById('itUnit').value,
       currentQty: Number(document.getElementById('itQty').value)||0,
       minQty: Number(document.getElementById('itMin').value)||0,
+      location: document.getElementById('itLocation').value || '',
+      group: document.getElementById('itGroup').value.trim(),
       updatedAt: todayISO()
     };
     if(!data.name){ toast('Ponle un nombre al artículo'); return; }
@@ -1995,6 +2085,7 @@ window.App = {
     closeModal(); toast('Artículo guardado'); render();
   },
   confirmDeleteItem(id){ if(confirm('¿Eliminar este artículo?')){ Data.del('items', id); closeModal(); toast('Artículo eliminado'); } },
+  openPriceCompare(id){ modalPriceCompare(id); },
   async toggleShoppingFlag(id){
     const it = state.items.find(i=>i.id===id);
     if(!it) return;
@@ -2027,6 +2118,8 @@ window.App = {
     const cost = type==='compra' ? Number(document.getElementById('mvCost').value)||0 : 0;
     const date = document.getElementById('mvDate').value || todayISO();
     const note = document.getElementById('mvNote').value.trim();
+    const storeEl = document.getElementById('mvStore');
+    const store = storeEl ? storeEl.value.trim() : '';
     const newQty = type==='compra' ? Number(item.currentQty||0)+qty : Math.max(0, Number(item.currentQty||0)-qty);
     const itemUpdate = {currentQty:newQty, updatedAt:date};
     if(type==='compra'){ itemUpdate.shoppingFlag=false; itemUpdate.shoppingFlagBy=null; itemUpdate.shoppingFlagAt=null; }
@@ -2034,7 +2127,7 @@ window.App = {
     const mem = currentMember();
     await Data.add('movements', {
       itemId:item.id, itemName:item.name, category:item.category, type, qty, unitCost: qty?cost/qty:0,
-      total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note
+      total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note, store
     });
     closeModal(); toast(type==='compra'?'Compra registrada':'Consumo registrado'); render();
   },
@@ -2071,6 +2164,8 @@ window.App = {
   },
   async saveTicket(){
     const date = document.getElementById('tkDate').value || todayISO();
+    const storeEl = document.getElementById('tkStore');
+    const store = storeEl ? storeEl.value.trim() : '';
     const rowEls = Array.from(document.querySelectorAll('.ticket-row'));
     const mem = currentMember();
     let count = 0;
@@ -2086,7 +2181,7 @@ window.App = {
         if(!name || (!qty && !cost)) continue;
         await Data.add('movements', {
           itemId:null, itemName:name, category:cat, type:'compra', qty: qty||1, unitCost: qty?cost/qty:cost,
-          total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra'
+          total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra', store
         });
         count++;
         continue;
@@ -2097,7 +2192,7 @@ window.App = {
       await Data.set('items', item.id, {currentQty:newQty, updatedAt:date, shoppingFlag:false, shoppingFlagBy:null, shoppingFlagAt:null}, true);
       await Data.add('movements', {
         itemId:item.id, itemName:item.name, category:item.category, type:'compra', qty, unitCost: qty?cost/qty:0,
-        total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra'
+        total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra', store
       });
       count++;
     }
