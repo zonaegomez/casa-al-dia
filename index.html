@@ -408,6 +408,15 @@ const CATS = {
   otro:     {label:'Otros gastos', color:'#6B7280', icon:'dots'}
 };
 const INVENTORY_CATS = ['despensa','limpieza','higiene','insumos'];
+// Tabs del Inventario unificado (antes: páginas separadas Despensa / Limpieza
+// e higiene / Insumos). "todos" muestra las 4 categorías juntas.
+const INVENTORY_TABS = [
+  {id:'todos', label:'Todos'},
+  {id:'despensa', label:'Despensa'},
+  {id:'limpieza', label:'Limpieza'},
+  {id:'higiene', label:'Higiene'},
+  {id:'insumos', label:'Insumos'}
+];
 const UNITS = ['pza','kg','g','L','ml','paquete','rollo','bolsa','caja'];
 // Ubicación física dentro de la casa (independiente de la categoría de gasto),
 // para poder organizar y guardar el inventario por cuarto/piso.
@@ -549,10 +558,11 @@ let state = {
   settings: {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0, budgetByCategory:{}, cycleStartDay:1},
   page: 'dashboard',
   memberId: localStorage.getItem(MEMBER_KEY) || null,
-  invTab: 'despensa',
+  invTab: 'todos',
   invSearch: '',
   gastosCycle: null,
   gastosGranularity: 'mensual', // mensual | quincenal
+  cuentasTab: 'gastos', // gastos | saldos
   dbMode: 'connecting', // connecting | live | local
   db: null,
   charts: {}
@@ -775,16 +785,23 @@ function currentMember(){
   return state.members.find(m=>m.id===state.memberId) || null;
 }
 
+function needsRestock(it){
+  // Un artículo agotado siempre necesita reposición, tenga o no un mínimo
+  // configurado. Antes, un artículo con mínimo=0 (o sin configurar) podía
+  // llegar a 0 de existencia y no generar ninguna alerta ni aparecer en la
+  // lista del súper — eso es lo que corregimos aquí.
+  return Number(it.currentQty)<=0 || (Number(it.minQty)>0 && Number(it.currentQty) <= Number(it.minQty));
+}
 function lowStockItems(){
-  return state.items.filter(it => Number(it.minQty)>0 && Number(it.currentQty) <= Number(it.minQty));
+  return state.items.filter(needsRestock);
 }
 function shoppingListItems(){
   return state.items
-    .filter(it => it.shoppingFlag || (Number(it.minQty)>0 && Number(it.currentQty) <= Number(it.minQty)))
+    .filter(it => it.shoppingFlag || needsRestock(it))
     .map(it => ({
       item: it,
       out: Number(it.currentQty)<=0,
-      low: Number(it.minQty)>0 && Number(it.currentQty) <= Number(it.minQty),
+      low: !(Number(it.currentQty)<=0) && Number(it.minQty)>0 && Number(it.currentQty) <= Number(it.minQty),
       flagged: !!it.shoppingFlag
     }))
     .sort((a,b)=>{
@@ -807,12 +824,9 @@ const NAV = [
   {id:'dashboard', label:'Dashboard', icon:'dashboard'},
   {id:'ubicaciones', label:'Ubicaciones', icon:'home'},
   {id:'super', label:'Lista del súper', icon:'cart'},
-  {id:'despensa', label:'Despensa', icon:'basket'},
-  {id:'limpieza-higiene', label:'Limpieza e higiene', icon:'spray'},
-  {id:'insumos', label:'Insumos', icon:'box'},
+  {id:'inventario', label:'Inventario', icon:'basket'},
   {id:'servicios', label:'Servicios', icon:'bolt'},
-  {id:'gastos', label:'Gastos', icon:'cash'},
-  {id:'saldos', label:'Saldo entre integrantes', icon:'wallet'},
+  {id:'cuentas', label:'Cuentas', icon:'cash'},
   {id:'recordatorios', label:'Recordatorios', icon:'bell'},
   {id:'ciclos', label:'Ciclos e historial', icon:'cycle'},
   {id:'config', label:'Miembros y ajustes', icon:'users'}
@@ -827,9 +841,8 @@ function navBadgeFor(id){
     const n = shoppingListItems().length;
     return n>0 ? n : null;
   }
-  if(id==='despensa' || id==='limpieza-higiene' || id==='insumos'){
-    const cats = id==='despensa' ? ['despensa'] : id==='insumos' ? ['insumos'] : ['limpieza','higiene'];
-    const n = state.items.filter(it=>cats.includes(it.category) && Number(it.minQty)>0 && Number(it.currentQty)<=Number(it.minQty)).length;
+  if(id==='inventario'){
+    const n = lowStockItems().length;
     return n>0 ? n : null;
   }
   if(id==='servicios'){
@@ -901,9 +914,8 @@ function renderMain(){
     return;
   }
   const pages = {
-    dashboard: pageDashboard, ubicaciones: pageUbicaciones, super: pageShoppingList, despensa: ()=>pageInventory('despensa'),
-    'limpieza-higiene': pageLimpiezaHigiene, insumos: ()=>pageInventory('insumos'),
-    servicios: pageServicios, gastos: pageGastos, saldos: pageSaldos, recordatorios: pageRecordatorios,
+    dashboard: pageDashboard, ubicaciones: pageUbicaciones, super: pageShoppingList, inventario: pageInventarioAll,
+    servicios: pageServicios, cuentas: pageCuentas, recordatorios: pageRecordatorios,
     ciclos: pageCiclos, config: pageConfig
   };
   el.innerHTML = (pages[state.page] || pageDashboard)();
@@ -917,7 +929,8 @@ function pageDashboard(){
   const prevCycle = prevCycleKey(cycle);
   const stats = computeCycleStats(cycle);
   const prevStats = computeCycleStats(prevCycle);
-  const delta = prevStats.total>0 ? ((stats.total-prevStats.total)/prevStats.total*100) : (stats.total>0?100:0);
+  const hasPrevCycle = prevStats.total>0;
+  const delta = hasPrevCycle ? ((stats.total-prevStats.total)/prevStats.total*100) : 0;
   const budget = Number(state.settings.monthlyBudget)||0;
   const budgetPct = budget>0 ? Math.min(100, stats.total/budget*100) : 0;
   const low = lowStockItems();
@@ -943,12 +956,13 @@ function pageDashboard(){
       <div class="kpi-card">
         <div class="kpi-label">${icon('cash')} Gasto del ciclo</div>
         <div class="kpi-value">${fmtMoney(stats.total)}</div>
-        <div class="kpi-delta ${delta>1?'up':delta<-1?'down':'flat'}">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(0)}% vs ciclo anterior</div>
+        <div class="kpi-delta ${!hasPrevCycle?'flat':delta>1?'up':delta<-1?'down':'flat'}">${hasPrevCycle ? (delta>=0?'▲':'▼')+' '+Math.abs(delta).toFixed(0)+'% vs ciclo anterior' : 'Sin periodo comparable'}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">${icon('wallet')} Presupuesto del mes</div>
         <div class="kpi-value">${budget>0?fmtMoney(Math.max(budget-stats.total,0)):'—'}</div>
-        ${budget>0 ? `<div class="progress"><span style="width:${budgetPct}%;background:${budgetPct>=100?'var(--bad)':budgetPct>=80?'var(--warn)':'var(--accent)'}"></span></div>
+        ${budget>0 ? `<div style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--ink-faint);margin-top:-6px;">DISPONIBLE</div>
+          <div class="progress"><span style="width:${budgetPct}%;background:${budgetPct>=100?'var(--bad)':budgetPct>=80?'var(--warn)':'var(--accent)'}"></span></div>
           <div class="kpi-foot">${fmtMoney(stats.total)} de ${fmtMoney(budget)} usado</div>`
           : `<div class="kpi-foot">Define un presupuesto en Ajustes</div>`}
       </div>
@@ -1005,7 +1019,7 @@ function pageDashboard(){
     <div class="panel" style="margin-top:14px;">
       <div class="panel-header">
         <div class="panel-title">${icon('cash')} Últimos movimientos</div>
-        <button class="btn btn-ghost btn-sm" onclick="App.go('gastos')">Ver todo ${icon('chevRight')}</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.go('cuentas')">Ver todo ${icon('chevRight')}</button>
       </div>
       <div class="panel-body pad0">
         ${renderRecentMovements()}
@@ -1029,7 +1043,7 @@ function renderAlertsList(low, dueSoon){
     const out = Number(it.currentQty)<=0;
     rows.push(`<div class="list-item">
       <div class="list-icon" style="color:${out?'var(--bad)':'var(--warn)'}">${icon(CATS[it.category]?.icon||'box')}</div>
-      <div class="list-main"><div class="list-title">${esc(it.name)}</div><div class="list-sub">${out?'Agotado':'Quedan '+it.currentQty+' '+it.unit} · mínimo ${it.minQty} ${it.unit}</div></div>
+      <div class="list-main"><div class="list-title">${esc(it.name)}</div><div class="list-sub">${out?'Agotado':'Quedan '+it.currentQty+' '+it.unit}${Number(it.minQty)>0?' · mínimo '+it.minQty+' '+it.unit:''}</div></div>
       <div class="list-end"><button class="btn btn-sm" onclick="App.openMovement('compra','${it.id}')">Reponer</button></div>
     </div>`);
   });
@@ -1373,46 +1387,27 @@ function modalLocationItems(loc){
 }
 
 /* ---------------- PAGE: inventory (despensa / insumos) ---------------- */
-function pageInventory(cat){
-  const meta = CATS[cat];
-  const items = state.items.filter(it=>it.category===cat && matchesSearch(it));
+function pageInventarioAll(){
+  // Un solo "Inventario" con filtros, en vez de Despensa / Limpieza e higiene /
+  // Insumos como páginas separadas — mismo dato, menos clics para llegar a él.
+  const tab = INVENTORY_TABS.find(t=>t.id===state.invTab) ? state.invTab : 'todos';
+  const items = state.items.filter(it => (tab==='todos' || it.category===tab) && matchesSearch(it));
+  const totalCount = tab==='todos' ? state.items.length : state.items.filter(it=>it.category===tab).length;
+  const tabLabel = (INVENTORY_TABS.find(t=>t.id===tab)||{}).label || 'Inventario';
   return `
     <div class="topbar">
       <div>
         <div class="page-eyebrow">Inventario</div>
-        <h1 class="page-title">${meta.label}</h1>
-        <div class="page-sub">${state.items.filter(it=>it.category===cat).length} artículos registrados</div>
+        <h1 class="page-title">${tab==='todos'?'Inventario':tabLabel}</h1>
+        <div class="page-sub">${totalCount} artículos registrados</div>
       </div>
       <div class="topbar-actions">
-        <button class="btn btn-primary" onclick="App.openItemForm(null,'${cat}')">${icon('plus')} Nuevo artículo</button>
-      </div>
-    </div>
-    ${searchBarHtml()}
-    <div class="panel" style="margin-top:12px;">
-      <div class="panel-body pad0">
-        ${inventoryTable(items)}
-      </div>
-    </div>
-  `;
-}
-function pageLimpiezaHigiene(){
-  const tab = state.invTab==='higiene' ? 'higiene' : 'limpieza';
-  const items = state.items.filter(it=>it.category===tab && matchesSearch(it));
-  return `
-    <div class="topbar">
-      <div>
-        <div class="page-eyebrow">Inventario</div>
-        <h1 class="page-title">Limpieza e higiene personal</h1>
-        <div class="page-sub">${state.items.filter(it=>['limpieza','higiene'].includes(it.category)).length} artículos registrados</div>
-      </div>
-      <div class="topbar-actions">
-        <button class="btn btn-primary" onclick="App.openItemForm(null,'${tab}')">${icon('plus')} Nuevo artículo</button>
+        <button class="btn btn-primary" onclick="App.openItemForm(null,'${tab==='todos'?INVENTORY_CATS[0]:tab}')">${icon('plus')} Nuevo artículo</button>
       </div>
     </div>
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
       <div class="tabs">
-        <div class="tab ${tab==='limpieza'?'active':''}" onclick="App.setInvTab('limpieza')">Limpieza del hogar</div>
-        <div class="tab ${tab==='higiene'?'active':''}" onclick="App.setInvTab('higiene')">Higiene personal</div>
+        ${INVENTORY_TABS.map(t=>`<div class="tab ${tab===t.id?'active':''}" onclick="App.setInvTab('${t.id}')">${t.label}</div>`).join('')}
       </div>
       ${searchBarHtml()}
     </div>
@@ -1525,30 +1520,8 @@ function billCard(b){
 }
 
 /* ---------------- PAGE: gastos ---------------- */
-function pageGastos(){
-  const gran = state.gastosGranularity || 'mensual';
-  const keys = allPeriodKeys(gran).reverse();
-  const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
-  const rows = allExpenseRows().filter(r=>periodKeyFor(r.date, gran)===activeCycle);
-  const total = rows.reduce((s,r)=>s+r.amount,0);
+function gastosBody(rows, total){
   return `
-    <div class="topbar">
-      <div>
-        <div class="page-eyebrow">Bitácora</div>
-        <h1 class="page-title">Gastos</h1>
-        <div class="page-sub">${rows.length} movimiento(s) · total ${fmtMoney(total)}</div>
-      </div>
-      <div class="topbar-actions">
-        <div class="tabs">
-          <div class="tab ${gran==='mensual'?'active':''}" onclick="App.setGastosGranularity('mensual')">Mensual</div>
-          <div class="tab ${gran==='quincenal'?'active':''}" onclick="App.setGastosGranularity('quincenal')">Quincenal</div>
-        </div>
-        <select class="btn" style="font-weight:600" onchange="App.setGastosCycle(this.value)">
-          ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(periodLabel(k, gran))}</option>`).join('')}
-        </select>
-        <button class="btn btn-primary" onclick="App.openManualExpense()">${icon('plus')} Gasto manual</button>
-      </div>
-    </div>
     <div class="panel">
       <div class="panel-body pad0">
         ${rows.length ? `<div class="table-scroll"><table>
@@ -1567,31 +1540,12 @@ function pageGastos(){
   `;
 }
 
-/* ---------------- PAGE: saldos entre integrantes ---------------- */
-function pageSaldos(){
-  const gran = state.gastosGranularity || 'mensual';
-  const keys = allPeriodKeys(gran).reverse();
-  const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
+/* ---------------- Saldo entre integrantes (cuerpo, vive dentro de "Cuentas") ---------------- */
+function saldosBody(activeCycle, gran){
   const b = computeBalances(activeCycle, gran);
   const hasMembers = state.members.length>=2;
+  if(!hasMembers) return `<div class="panel"><div class="panel-body">${emptyBlock('users','Agrega al menos dos miembros de la casa en Ajustes para poder calcular un saldo entre integrantes.')}</div></div>`;
   return `
-    <div class="topbar">
-      <div>
-        <div class="page-eyebrow">Entre la casa</div>
-        <h1 class="page-title">Saldo entre integrantes</h1>
-        <div class="page-sub">Reparto justo del gasto de ${cap(periodLabel(activeCycle, gran))}</div>
-      </div>
-      <div class="topbar-actions">
-        <div class="tabs">
-          <div class="tab ${gran==='mensual'?'active':''}" onclick="App.setGastosGranularity('mensual')">Mensual</div>
-          <div class="tab ${gran==='quincenal'?'active':''}" onclick="App.setGastosGranularity('quincenal')">Quincenal</div>
-        </div>
-        <select class="btn" style="font-weight:600" onchange="App.setGastosCycle(this.value)">
-          ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(periodLabel(k, gran))}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    ${!hasMembers ? `<div class="panel"><div class="panel-body">${emptyBlock('users','Agrega al menos dos miembros de la casa en Ajustes para poder calcular un saldo entre integrantes.')}</div></div>` : `
     <div class="panel">
       <div class="panel-body pad0">
         <div class="table-scroll"><table>
@@ -1634,24 +1588,72 @@ function pageSaldos(){
           </div>
         </div>`).join('')}
       </div>
-    </div>` : ''}`}
+    </div>` : ''}
+  `;
+}
+
+/* ---------------- PAGE: cuentas (Gastos + Saldo entre integrantes unificados) ---------------- */
+function pageCuentas(){
+  const gran = state.gastosGranularity || 'mensual';
+  const keys = allPeriodKeys(gran).reverse();
+  const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
+  const tab = state.cuentasTab==='saldos' ? 'saldos' : 'gastos';
+  const rows = allExpenseRows().filter(r=>periodKeyFor(r.date, gran)===activeCycle);
+  const total = rows.reduce((s,r)=>s+r.amount,0);
+  return `
+    <div class="topbar">
+      <div>
+        <div class="page-eyebrow">Cuentas</div>
+        <h1 class="page-title">${tab==='gastos'?'Gastos':'Saldo entre integrantes'}</h1>
+        <div class="page-sub">${tab==='gastos' ? rows.length+' movimiento(s) · total '+fmtMoney(total) : 'Reparto justo del gasto de '+cap(periodLabel(activeCycle, gran))}</div>
+      </div>
+      <div class="topbar-actions">
+        <div class="tabs">
+          <div class="tab ${gran==='mensual'?'active':''}" onclick="App.setGastosGranularity('mensual')">Mensual</div>
+          <div class="tab ${gran==='quincenal'?'active':''}" onclick="App.setGastosGranularity('quincenal')">Quincenal</div>
+        </div>
+        <select class="btn" style="font-weight:600" onchange="App.setGastosCycle(this.value)">
+          ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(periodLabel(k, gran))}</option>`).join('')}
+        </select>
+        ${tab==='gastos' ? `<button class="btn btn-primary" onclick="App.openManualExpense()">${icon('plus')} Gasto manual</button>` : ''}
+      </div>
+    </div>
+    <div class="tabs" style="margin-bottom:10px;">
+      <div class="tab ${tab==='gastos'?'active':''}" onclick="App.setCuentasTab('gastos')">Gastos</div>
+      <div class="tab ${tab==='saldos'?'active':''}" onclick="App.setCuentasTab('saldos')">Saldo entre integrantes</div>
+    </div>
+    ${tab==='gastos' ? gastosBody(rows, total) : saldosBody(activeCycle, gran)}
   `;
 }
 
 /* ---------------- PAGE: recordatorios ---------------- */
 function pageRecordatorios(){
   const manual = state.reminders.slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
-  const autoBills = dueSoonBills(30).map(b=>({title:'Pagar '+b.name, dueDate:b.nextDueDate, auto:true, kind:'bill', ref:b}));
+  const autoBills = dueSoonBills(60).map(b=>({title:'Pagar '+b.name, dueDate:b.nextDueDate, auto:true, kind:'bill', ref:b}));
   const autoStock = lowStockItems().map(it=>({title:'Reponer '+it.name, dueDate:todayISO(), auto:true, kind:'stock', ref:it}));
   const all = [...manual.map(r=>({...r, auto:false})), ...autoBills, ...autoStock];
+
+  // Agrupamos por mes calendario real (no por "próximos 31 días"), para que un
+  // pendiente de inicios del siguiente mes no aparezca bajo el encabezado
+  // "Este mes" mientras todavía estamos en el mes anterior.
+  const todayDt = new Date(todayISO()+'T00:00:00');
+  const curY = todayDt.getFullYear(), curM = todayDt.getMonth();
+  const weekEndDt = new Date(todayDt); weekEndDt.setDate(weekEndDt.getDate()+7);
+  const weekEndIso = weekEndDt.toISOString().slice(0,10);
+  const monthEndDt = new Date(curY, curM+1, 0);
+  const monthEndIso = monthEndDt.toISOString().slice(0,10);
+
   const groups = {vencidos:[], hoy:[], semana:[], mes:[], futuro:[]};
   all.forEach(r=>{
     if(r.done){ return; }
-    const d = daysBetween(todayISO(), r.dueDate||todayISO());
+    const dueIso = r.dueDate||todayISO();
+    const d = daysBetween(todayISO(), dueIso);
+    const dueDt = new Date(dueIso+'T00:00:00');
+    const sameMonth = dueDt.getFullYear()===curY && dueDt.getMonth()===curM;
     if(d<0) groups.vencidos.push(r);
     else if(d===0) groups.hoy.push(r);
     else if(d<=7) groups.semana.push(r);
-    else if(d<=31) groups.mes.push(r);
+    else if(sameMonth) groups.mes.push(r);
     else groups.futuro.push(r);
   });
   const done = manual.filter(r=>r.done);
@@ -1671,8 +1673,8 @@ function pageRecordatorios(){
     </div>
     ${sec('Vencidos', groups.vencidos)}
     ${sec('Hoy', groups.hoy)}
-    ${sec('Esta semana', groups.semana)}
-    ${sec('Este mes', groups.mes)}
+    ${sec(`Esta semana · hasta ${fmtDate(weekEndIso)}`, groups.semana)}
+    ${sec(`Este mes · hasta ${fmtDate(monthEndIso)}`, groups.mes)}
     ${sec('Más adelante', groups.futuro)}
     ${!groups.vencidos.length && !groups.hoy.length && !groups.semana.length && !groups.mes.length && !groups.futuro.length ?
       `<div class="panel"><div class="panel-body">${emptyBlock('check', 'No hay nada pendiente por ahora.')}</div></div>` : ''}
@@ -2133,6 +2135,7 @@ window.App = {
   setSearch: debounce(function(v){ state.invSearch = v; render(); const inp=document.querySelector('.search input'); if(inp){inp.focus(); inp.selectionStart=inp.selectionEnd=inp.value.length;} }, 180),
   setGastosCycle(v){ state.gastosCycle = v; render(); },
   setGastosGranularity(v){ state.gastosGranularity = v; state.gastosCycle = null; render(); },
+  setCuentasTab(t){ state.cuentasTab = t; render(); },
 
   openMemberSwitch(){ modalMemberSwitch(); },
   selectMember(id){ state.memberId=id; localStorage.setItem(MEMBER_KEY, id); closeModal(); render(); },
