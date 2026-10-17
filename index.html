@@ -1346,6 +1346,7 @@ function drawCharts(){
   const isDark = themeAttr === 'dark' || (themeAttr !== 'light' && systemDark);
   const gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
   const textColor = isDark ? '#AEB5A2' : '#5B6350';
+  const accentColor = (window.casaTheme && window.casaTheme.accent) || '#6258E8';
 
   const trendCanvas = document.getElementById('chartTrend');
   if(trendCanvas){
@@ -1355,7 +1356,7 @@ function drawCharts(){
     state.charts.trend = new Chart(trendCanvas, {
       type:'bar',
       data:{ labels: keys.map(k=>cap(cycleLabel(k).split(' de ')[0])),
-        datasets:[{ data, backgroundColor:'#3E6DF6', borderRadius:6, maxBarThickness:34 }] },
+        datasets:[{ data, backgroundColor:accentColor, borderRadius:6, maxBarThickness:34 }] },
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtMoney(c.parsed.y)}}},
         scales:{ x:{grid:{display:false}, ticks:{color:textColor}},
