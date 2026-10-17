@@ -414,6 +414,7 @@
   .sync-pill .dot{width:6px;height:6px;}
 
   .mobile-nav{display:none;}
+  .mobile-topbar{display:none;}
 
   @media (max-width: 980px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
@@ -423,6 +424,17 @@
     .app-shell{grid-template-columns:1fr;}
     .sidebar{display:none;}
     .main{padding:16px 14px 90px;}
+    .mobile-topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:calc(9px + env(safe-area-inset-top)) 14px 9px;
+      background:var(--surface); border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:55;
+    }
+    .mobile-topbar .brand{padding:0; gap:8px;}
+    .mobile-topbar .brand-mark{width:30px; height:30px; border-radius:10px;}
+    .mobile-topbar .brand-name{font-size:14px;}
+    .mobile-topbar .member-switch{width:auto; padding:5px 10px 5px 5px;}
+    .mobile-topbar .member-switch .label{display:none;}
     .kpi-grid{grid-template-columns:1fr 1fr;}
     .mobile-nav{
       display:flex; position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border);
@@ -467,6 +479,7 @@ window.CASA_THEME_KEY = 'casa-theme-v1';
 </head>
 <body>
 
+<header class="mobile-topbar" id="mobileTopbar"></header>
 <div class="app-shell">
   <aside class="sidebar" id="sidebar"></aside>
   <main class="main" id="main"></main>
@@ -879,6 +892,7 @@ function seedStarterLocal(){
 /* ---------------- render shell ---------------- */
 function render(){
   renderSidebar();
+  renderMobileTopbar();
   renderMobileNav();
   renderMain();
 }
@@ -997,6 +1011,30 @@ function navItemHtml(n){
     ${icon(n.icon)}<span>${n.label}</span>
     ${badge?`<span class="nav-badge">${badge}</span>`:''}
   </div>`;
+}
+function renderMobileTopbar(){
+  // En escritorio quien está registrando se elige desde la barra lateral; en celular
+  // esa barra se oculta por completo, así que sin esto no había forma de elegir
+  // (ni de ver) quién eres en el teléfono. Esta barra superior solo se muestra en
+  // mobile (ver CSS @media max-width:760px) y reusa el mismo botón/modal que el de escritorio.
+  const el = document.getElementById('mobileTopbar');
+  if(!el) return;
+  const m = currentMember();
+  el.innerHTML = `
+    <div class="brand">
+      <div class="brand-mark">${icon('basket')}</div>
+      <div class="brand-name">${esc(state.settings.householdName||'Mi Casa')}</div>
+    </div>
+    <button class="member-switch" onclick="App.openMemberSwitch()">
+      ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>`
+          : `<span class="avatar" style="background:var(--ink-faint)">?</span>`}
+      <span>
+        <div class="label">Registrando como</div>
+        <div class="name">${m?esc(m.name):'Elegir quién soy'}</div>
+      </span>
+      <span class="switch-caret">${icon('chevDown')}</span>
+    </button>
+  `;
 }
 function renderMobileNav(){
   const el = document.getElementById('mobileNav');
