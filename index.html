@@ -11,32 +11,32 @@
 <meta name="apple-mobile-web-app-title" content="Casa al Día">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg:#F3F5FB; --surface:#FFFFFF; --surface-2:#EEF1F9; --border:#E1E5F2;
-    --ink:#181D33; --ink-soft:#666D85; --ink-faint:#9AA0B5;
-    --accent:#3E6DF6; --accent-ink:#FFFFFF; --accent-soft:#E8EEFE; --accent-strong:#2A4FCC;
+    --bg:#F7F7FC; --surface:#FFFFFF; --surface-2:#EFEDFB; --border:#E7E5F3;
+    --ink:#201F2C; --ink-soft:#716F84; --ink-faint:#9896AB;
+    --accent:#6258E8; --accent-ink:#FFFFFF; --accent-soft:#EEEBFF; --accent-strong:#4A3FC4;
     --accent2:#EC4899; --accent2-ink:#FFFFFF; --accent2-soft:#FCE7F3; --accent2-strong:#BE185D;
     --good:#22C55E; --good-soft:#E7F9EE;
     --warn:#F59E0B; --warn-soft:#FEF3DC;
     --bad:#EF4444; --bad-soft:#FDE8E8;
-    --shadow-sm:0 1px 2px rgba(24,29,51,.06);
-    --shadow-md:0 10px 26px -12px rgba(24,29,51,.20);
-    --shadow-lg:0 26px 60px -18px rgba(24,29,51,.28);
-    --radius:16px; --radius-sm:11px;
-    --glow-1:rgba(62,109,246,.10); --glow-2:rgba(236,72,153,.08);
+    --shadow-sm:0 1px 2px rgba(32,31,44,.06);
+    --shadow-md:0 10px 26px -12px rgba(32,31,44,.20);
+    --shadow-lg:0 26px 60px -18px rgba(32,31,44,.28);
+    --radius:20px; --radius-sm:13px;
+    --glow-1:rgba(98,88,232,.10); --glow-2:rgba(236,72,153,.07);
     --grain-op:.05;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#0E1220; --surface:#161B2E; --surface-2:#1D233A; --border:#2B3350;
-      --ink:#E7EAF5; --ink-soft:#A0A8C0; --ink-faint:#6B7290;
-      --accent:#6E8FFF; --accent-ink:#0B1230; --accent-soft:#1C2A52; --accent-strong:#A7BBFF;
+      --bg:#17151F; --surface:#201E2C; --surface-2:#2A2738; --border:#3A3750;
+      --ink:#EEEDF7; --ink-soft:#ACA9C0; --ink-faint:#746F90;
+      --accent:#8A7FFF; --accent-ink:#17122E; --accent-soft:#2A2651; --accent-strong:#BCB3FF;
       --accent2:#F472B6; --accent2-ink:#3A0A22; --accent2-soft:#3A1830; --accent2-strong:#FBA5D0;
       --good:#4ADE80; --good-soft:#12301F;
       --warn:#FBBF24; --warn-soft:#332411;
@@ -44,14 +44,14 @@
       --shadow-sm:0 1px 2px rgba(0,0,0,.35);
       --shadow-md:0 12px 28px -10px rgba(0,0,0,.5);
       --shadow-lg:0 28px 60px -18px rgba(0,0,0,.6);
-      --glow-1:rgba(110,143,255,.12); --glow-2:rgba(244,114,182,.08);
+      --glow-1:rgba(138,127,255,.14); --glow-2:rgba(244,114,182,.08);
       --grain-op:.07;
     }
   }
   :root[data-theme="dark"]{
-    --bg:#0E1220; --surface:#161B2E; --surface-2:#1D233A; --border:#2B3350;
-    --ink:#E7EAF5; --ink-soft:#A0A8C0; --ink-faint:#6B7290;
-    --accent:#6E8FFF; --accent-ink:#0B1230; --accent-soft:#1C2A52; --accent-strong:#A7BBFF;
+    --bg:#17151F; --surface:#201E2C; --surface-2:#2A2738; --border:#3A3750;
+    --ink:#EEEDF7; --ink-soft:#ACA9C0; --ink-faint:#746F90;
+    --accent:#8A7FFF; --accent-ink:#17122E; --accent-soft:#2A2651; --accent-strong:#BCB3FF;
     --accent2:#F472B6; --accent2-ink:#3A0A22; --accent2-soft:#3A1830; --accent2-strong:#FBA5D0;
     --good:#4ADE80; --good-soft:#12301F;
     --warn:#FBBF24; --warn-soft:#332411;
@@ -59,7 +59,7 @@
     --shadow-sm:0 1px 2px rgba(0,0,0,.35);
     --shadow-md:0 12px 28px -10px rgba(0,0,0,.5);
     --shadow-lg:0 28px 60px -18px rgba(0,0,0,.6);
-    --glow-1:rgba(110,143,255,.12); --glow-2:rgba(244,114,182,.08);
+    --glow-1:rgba(138,127,255,.14); --glow-2:rgba(244,114,182,.08);
     --grain-op:.07;
   }
 
@@ -67,7 +67,7 @@
   html,body{margin:0;padding:0;}
   body{
     color:var(--ink);
-    font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+    font-family:'DM Sans',system-ui,-apple-system,sans-serif;
     font-size:14px; line-height:1.5;
     -webkit-font-smoothing:antialiased;
     background-color:var(--bg);
@@ -80,7 +80,7 @@
   }
   body{ background-blend-mode:normal, normal, overlay; }
   html{ background:var(--bg); }
-  h1,h2,h3,.display{font-family:'Fraunces',ui-serif,Georgia,serif; font-weight:600; letter-spacing:-.01em; text-wrap:balance;}
+  h1,h2,h3,.display{font-family:'Manrope',ui-sans-serif,system-ui,sans-serif; font-weight:800; letter-spacing:-.02em; text-wrap:balance;}
   .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums;}
   a{color:inherit;}
   button{font-family:inherit; font-size:inherit;}
@@ -113,7 +113,7 @@
     box-shadow:var(--shadow-md), inset 0 1px 0 rgba(255,255,255,.18);
     display:flex; align-items:center; justify-content:center; color:var(--accent-ink);
   }
-  .brand-name{font-family:'Fraunces',serif; font-weight:600; font-size:17px; line-height:1.15;}
+  .brand-name{font-family:'Manrope',sans-serif; font-weight:800; font-size:17px; line-height:1.15;}
   .brand-sub{font-size:11px; color:var(--ink-faint); letter-spacing:.03em; text-transform:uppercase;}
 
   .member-switch{
@@ -127,7 +127,7 @@
     font-size:13px; color:#fff; font-weight:700; box-shadow:0 0 0 2px var(--surface);
   }
   .member-switch .label{font-size:11px; color:var(--ink-faint);}
-  .member-switch .name{font-size:13px; font-weight:700; font-family:'Fraunces',serif;}
+  .member-switch .name{font-size:13px; font-weight:700; font-family:'Manrope',sans-serif;}
   .switch-caret{margin-left:auto; color:var(--ink-faint); font-size:11px;}
 
   nav.nav{display:flex; flex-direction:column; gap:2px; margin-top:4px;}
@@ -154,7 +154,7 @@
   .main{min-width:0; padding:24px 30px 80px;}
   .topbar{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap;}
   .page-eyebrow{font-size:11.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--accent-strong); font-weight:700;}
-  .page-title{font-family:'Fraunces',serif; font-size:27px; font-weight:600; margin:3px 0 0;}
+  .page-title{font-family:'Manrope',sans-serif; font-size:28px; font-weight:800; letter-spacing:-.03em; margin:3px 0 0;}
   .page-sub{color:var(--ink-soft); font-size:13px; margin-top:4px;}
   .topbar-actions{display:flex; gap:8px; flex-wrap:wrap;}
 
@@ -212,7 +212,7 @@
     box-shadow:var(--shadow-sm); animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both; animation-delay:.1s;
   }
   .panel-header{display:flex; align-items:center; justify-content:space-between; padding:15px 17px 11px; gap:8px;}
-  .panel-title{font-family:'Fraunces',serif; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px;}
+  .panel-title{font-family:'Manrope',sans-serif; font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px;}
   .panel-title svg{color:var(--accent); width:15px; height:15px;}
   .panel-body{padding:6px 17px 17px;}
   .panel-body.pad0{padding:0 0 4px;}
@@ -264,7 +264,7 @@
   .member-row:hover{background:var(--surface-2);}
   .member-row .avatar{width:34px; height:34px; font-size:14px;}
   .member-row-main{min-width:0; flex:1;}
-  .member-row-name{font-weight:700; font-size:13.5px; font-family:'Fraunces',serif;}
+  .member-row-name{font-weight:700; font-size:13.5px; font-family:'Manrope',sans-serif;}
   .member-row-stats{display:flex; gap:12px; margin-top:3px;}
   .member-row-stats span{display:inline-flex; align-items:center; gap:4px; font-size:11.5px; color:var(--ink-faint); font-weight:600;}
   .member-row-stats svg{width:13px; height:13px;}
@@ -289,7 +289,7 @@
   }
   .bill-card:hover{transform:translateY(-2px); box-shadow:var(--shadow-md);}
   .bill-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;}
-  .bill-name{font-weight:700; font-size:14.5px; font-family:'Fraunces',serif;}
+  .bill-name{font-weight:700; font-size:14.5px; font-family:'Manrope',sans-serif;}
   .bill-meta{font-size:11.5px; color:var(--ink-faint);}
   .bill-amount{font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:600;}
   .bill-icon{width:32px; height:32px; border-radius:10px; background:var(--accent2-soft); color:var(--accent2-strong); display:flex; align-items:center; justify-content:center; flex:none;}
@@ -303,6 +303,62 @@
   .room-card:hover{transform:translateY(-2px); box-shadow:var(--shadow-md);}
   .floor-label{margin:18px 0 8px; font-weight:700; text-transform:uppercase; font-size:12px; letter-spacing:.04em; color:var(--ink-faint);}
 
+  /* ---------- dashboard: hero + wallet + quick actions ---------- */
+  .hero-row{display:grid; grid-template-columns:1.4fr 1fr; gap:14px; margin-bottom:16px;}
+  .hero-card{
+    background:var(--accent-soft); border-radius:24px; padding:28px; position:relative; overflow:hidden;
+    display:flex; flex-direction:column; justify-content:center; min-height:168px;
+    animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .hero-card:after{
+    content:'⌂'; position:absolute; right:-14px; bottom:-38px; font-size:155px; line-height:1;
+    color:var(--accent); opacity:.1; transform:rotate(-8deg);
+  }
+  .hero-card h1{position:relative; z-index:1; font-size:26px; margin:0 0 7px; max-width:80%;}
+  .hero-card p{position:relative; z-index:1; max-width:75%; margin:0 0 16px;}
+  .hero-card .btn-primary{position:relative; z-index:1; align-self:flex-start;}
+  .wallet-card{
+    background:linear-gradient(155deg, var(--ink) 0%, color-mix(in srgb, var(--ink) 80%, var(--accent)) 100%);
+    color:#fff; border-radius:24px; padding:26px; display:flex; flex-direction:column; justify-content:space-between;
+    animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both; animation-delay:.05s; min-height:168px;
+  }
+  .wallet-card .eyebrow{color:#ffffffa8;}
+  .wallet-card .amount{font-family:'IBM Plex Mono',monospace; font-size:32px; font-weight:600; margin:10px 0 3px; letter-spacing:-.01em;}
+  .wallet-card p{color:#ffffffb0; font-size:12px; margin:0;}
+  .wallet-foot{display:flex; align-items:center; justify-content:space-between; margin-top:14px;}
+  .wallet-foot .btn{background:#ffffff1c; border-color:#ffffff2a; color:#fff;}
+  .wallet-foot .btn:hover{background:#ffffff2c;}
+
+  .quick-actions{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px;}
+  .quick-action{
+    display:flex; align-items:center; gap:11px; text-align:left; padding:14px 15px;
+    background:var(--surface); border:1px solid var(--border); border-radius:16px; color:var(--ink);
+    box-shadow:var(--shadow-sm); transition:transform .16s ease, box-shadow .16s ease;
+  }
+  .quick-action:hover{transform:translateY(-2px); box-shadow:var(--shadow-md); border-color:var(--ink-faint);}
+  .quick-action .qicon{
+    width:38px; height:38px; border-radius:12px; flex:none; display:flex; align-items:center; justify-content:center;
+    background:var(--accent-soft); color:var(--accent-strong);
+  }
+  .quick-action b{display:block; font-size:12.5px; font-weight:700;}
+  .quick-action small{display:block; font-size:10.5px; color:var(--ink-faint); margin-top:2px;}
+
+  /* ---------- appearance / theme picker (Ajustes) ---------- */
+  .mode-options{display:flex; gap:4px; background:var(--surface-2); padding:4px; border-radius:var(--radius-sm); width:fit-content;}
+  .mode-options button{padding:8px 14px; border:0; border-radius:9px; background:transparent; color:var(--ink-soft); font-size:12.5px; font-weight:700; cursor:pointer;}
+  .mode-options button.selected{background:var(--surface); color:var(--accent-strong); box-shadow:var(--shadow-sm);}
+  .theme-preview{border:1px solid var(--border); border-radius:16px; padding:18px; margin-top:16px; background:var(--bg);}
+
+  @media (max-width: 980px){
+    .hero-row{grid-template-columns:1fr;}
+    .quick-actions{grid-template-columns:repeat(2,1fr);}
+  }
+  @media (max-width: 760px){
+    .quick-actions{grid-template-columns:repeat(2,1fr); gap:9px;}
+    .quick-action{padding:11px 12px;}
+    .quick-action small{display:none;}
+  }
+
   /* ---------- modal ---------- */
   .modal-overlay{
     position:fixed; inset:0; background:rgba(18,22,15,.5); backdrop-filter:blur(2px);
@@ -315,7 +371,7 @@
     animation:popIn .22s cubic-bezier(.2,.8,.3,1) both;
   }
   .modal-header{display:flex; align-items:center; justify-content:space-between; padding:18px 19px 8px;}
-  .modal-header h3{margin:0; font-size:18px; font-family:'Fraunces',serif; font-weight:600;}
+  .modal-header h3{margin:0; font-size:18px; font-family:'Manrope',sans-serif; font-weight:600;}
   .modal-body{padding:6px 19px 19px; display:flex; flex-direction:column; gap:12px;}
   .modal-foot{display:flex; justify-content:flex-end; gap:8px; padding:4px 19px 19px;}
   .field{display:flex; flex-direction:column; gap:5px;}
@@ -365,6 +421,35 @@
   }
   [hidden]{display:none !important;}
 </style>
+<script>
+/* Tema de apariencia (color de acento + claro/oscuro/automático). Se aplica
+   lo antes posible, antes de pintar el resto de la página, para evitar un
+   parpadeo del color por defecto. Guardado por navegador (no por Firestore),
+   igual que la propuesta visual original. */
+window.CASA_THEME_KEY = 'casa-theme-v1';
+(function(){
+  let t;
+  try{ t = JSON.parse(localStorage.getItem(window.CASA_THEME_KEY)); }catch(e){}
+  t = t || {};
+  if(!/^#[0-9a-fA-F]{6}$/.test(t.accent||'')) t.accent = '#6258E8';
+  if(!['light','dark','auto'].includes(t.mode)) t.mode = 'auto';
+  window.casaTheme = t;
+  window.applyTheme = function(){
+    const root = document.documentElement;
+    if(window.casaTheme.mode==='light') root.setAttribute('data-theme','light');
+    else if(window.casaTheme.mode==='dark') root.setAttribute('data-theme','dark');
+    else root.removeAttribute('data-theme');
+    const isDark = window.casaTheme.mode==='dark' || (window.casaTheme.mode==='auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const c = window.casaTheme.accent;
+    root.style.setProperty('--accent', c);
+    root.style.setProperty('--accent-ink', '#ffffff');
+    root.style.setProperty('--accent-strong', isDark ? `color-mix(in srgb, ${c} 55%, white)` : `color-mix(in srgb, ${c} 72%, black)`);
+    root.style.setProperty('--accent-soft', isDark ? `color-mix(in srgb, ${c} 20%, #201E2C)` : `color-mix(in srgb, ${c} 9%, white)`);
+  };
+  window.applyTheme();
+  if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{ if(window.casaTheme.mode==='auto') window.applyTheme(); });
+})();
+</script>
 </head>
 <body>
 
@@ -440,6 +525,8 @@ const STORE_SUGGESTIONS = ['HEB','Walmart','Soriana','Costco','Chedraui','Bodega
 const BILL_SUBTYPES = ['Luz (CFE)','Agua','Gas LP / Natural','Internet','Telefonía','Streaming','Predial','Mantenimiento','Otro'];
 const CYCLE_MONTHS = {mensual:1, bimestral:2, trimestral:3, anual:12};
 const MEMBER_COLORS = ['#3E6DF6','#EC4899','#8B5CF6','#0EA5B7','#F59E0B','#22C55E','#EF4444','#F97316'];
+// Colores de acento para la apariencia de la app (tema personal por dispositivo).
+const THEME_COLORS = ['#6258E8','#3E6DF6','#0EA5B7','#22C55E','#EC4899','#F59E0B'];
 const LOCAL_KEY = 'casa_al_dia_local_v1';
 const MEMBER_KEY = 'casa_al_dia_member_id';
 
@@ -537,6 +624,7 @@ const ICONS = {
   download:'<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
   gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.6 1Z"/>',
   wifi:'<path d="M5 13a11 11 0 0 1 14 0"/><path d="M8.5 16.5a6 6 0 0 1 7 0"/><path d="M12 20h.01"/>',
+  palette:'<path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3A4.2 4.2 0 0 0 21.5 11 9.9 9.9 0 0 0 12 2Z"/><circle cx="7" cy="10" r="1.3"/><circle cx="11" cy="6.5" r="1.3"/><circle cx="16" cy="8" r="1.3"/><circle cx="17" cy="13" r="1.3"/>',
   cloudOff:'<path d="M3 3l18 18"/><path d="M9.5 5.5A6 6 0 0 1 20 10a4.5 4.5 0 0 1-.6 8.9"/><path d="M6 8.3A4.5 4.5 0 0 0 6.5 17H15"/>',
   warn:'<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.4 18a1.5 1.5 0 0 0 1.3 2.2h16.6A1.5 1.5 0 0 0 21.6 18L13.7 3.9a1.5 1.5 0 0 0-2.6 0Z"/>',
   calendar:'<rect x="3" y="4.5" width="18" height="16" rx="2.2"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/>',
@@ -936,20 +1024,43 @@ function pageDashboard(){
   const low = lowStockItems();
   const dueSoon = dueSoonBills(7);
   const nextBill = dueSoonBills(9999)[0];
+  const me = currentMember();
+  const bal = state.members.length>=2 ? computeBalances(cycle, 'mensual') : null;
+  const myRow = bal && me ? bal.balances.find(r=>r.member.id===me.id) : null;
+  const myBalance = myRow ? myRow.balance : 0;
 
   return `
     <div class="topbar">
       <div>
         <div class="page-eyebrow">${fmtDateLong(todayISO())}</div>
-        <h1 class="page-title">Hola${currentMember()?', '+esc(currentMember().name):''}</h1>
+        <h1 class="page-title">Hola${me?', '+esc(me.name):''}</h1>
         <div class="page-sub">Ciclo actual: <strong>${cap(cycleLabel(cycle))}</strong></div>
       </div>
-      <div class="topbar-actions">
-        <button class="btn" onclick="App.openMovement('consumo')">${icon('basket')} Registrar consumo</button>
-        <button class="btn" onclick="App.openTicketScan()">${icon('cart')} Escanear ticket</button>
-        <button class="btn" onclick="App.openTicket()">${icon('cart')} Ticket de compra</button>
+    </div>
+
+    <div class="hero-row">
+      <section class="hero-card">
+        <div class="page-eyebrow" style="margin-bottom:8px;">LA CASA AL DÍA</div>
+        <h1>${low.length ? `Hay ${low.length} artículo(s) por reponer.` : 'Todo abastecido en casa.'}</h1>
+        <p>${nextBill ? `Próximo pago: ${esc(nextBill.name)} · ${fmtDate(nextBill.nextDueDate)}.` : 'Sin pagos pendientes por ahora.'}</p>
         <button class="btn btn-primary" onclick="App.openMovement('compra')">${icon('plus')} Registrar compra</button>
-      </div>
+      </section>
+      <section class="wallet-card">
+        <div class="page-eyebrow">${bal ? 'TU SALDO · ESTE CICLO' : 'GASTO DEL CICLO'}</div>
+        <div class="amount">${bal ? fmtMoney(Math.abs(myBalance)) : fmtMoney(stats.total)}</div>
+        <p>${bal ? (myBalance<-0.5?'Te toca aportar':myBalance>0.5?'Tienes por recibir':'Estás al parejo') : 'Agrega miembros para calcular el reparto'}</p>
+        <div class="wallet-foot">
+          <span class="small" style="color:#ffffffa0;">${cap(cycleLabel(cycle))}</span>
+          <button class="btn btn-sm" onclick="App.go('cuentas')">Ver cuentas ${icon('chevRight')}</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="quick-actions">
+      <button class="quick-action" onclick="App.openMovement('compra')"><span class="qicon">${icon('plus')}</span><div><b>Registrar compra</b><small>Lo que llega a casa</small></div></button>
+      <button class="quick-action" onclick="App.openMovement('consumo')"><span class="qicon">${icon('basket')}</span><div><b>Registrar consumo</b><small>Lo que se gastó</small></div></button>
+      <button class="quick-action" onclick="App.openTicketScan()"><span class="qicon">${icon('cart')}</span><div><b>Escanear ticket</b><small>Carga automática</small></div></button>
+      <button class="quick-action" onclick="App.openTicket()"><span class="qicon">${icon('cart')}</span><div><b>Ticket de compra</b><small>Captura manual</small></div></button>
     </div>
 
     <div class="kpi-grid">
@@ -968,7 +1079,7 @@ function pageDashboard(){
       </div>
       <div class="kpi-card">
         <div class="kpi-label">${icon('calendar')} Próximo pago</div>
-        <div class="kpi-value" style="font-family:'Fraunces',serif; font-weight:600; font-size:17px;">${nextBill?esc(nextBill.name):'Sin pendientes'}</div>
+        <div class="kpi-value" style="font-family:'Manrope',sans-serif; font-weight:600; font-size:17px;">${nextBill?esc(nextBill.name):'Sin pendientes'}</div>
         <div class="kpi-foot">${nextBill? (daysBetween(todayISO(),nextBill.nextDueDate)<0 ? `Vencido · ${fmtDate(nextBill.nextDueDate)}` : `${fmtDate(nextBill.nextDueDate)} · ${daysBetween(todayISO(),nextBill.nextDueDate)===0?'hoy':'en '+daysBetween(todayISO(),nextBill.nextDueDate)+' días'}`) : 'Todo pagado por ahora'}</div>
       </div>
       <div class="kpi-card">
@@ -1347,7 +1458,7 @@ function roomCardHtml(loc){
     <div style="display:flex; align-items:center; gap:10px;">
       <div style="width:38px; height:38px; border-radius:11px; background:${hexSoft(colorVar)}; color:${colorVar}; display:flex; align-items:center; justify-content:center; flex:none;">${icon(iconName)}</div>
       <div>
-        <div style="font-weight:700; font-family:'Fraunces',serif;">${esc(loc)}</div>
+        <div style="font-weight:700; font-family:'Manrope',sans-serif;">${esc(loc)}</div>
         <div class="row-sub">${s.total} artículo(s) aquí</div>
       </div>
     </div>
@@ -1799,6 +1910,22 @@ function pageConfig(){
       </div>
     </div>
     <div class="panel" style="margin-top:14px;">
+      <div class="panel-header"><div class="panel-title">${icon('palette')} Apariencia</div></div>
+      <div class="panel-body">
+        <div class="page-sub" style="margin-bottom:12px;">El color y el modo claro/oscuro se guardan en este dispositivo — cada quien puede elegir el suyo sin afectar a los demás.</div>
+        <div class="field"><label>Color de acento</label>
+          <div class="swatches">${THEME_COLORS.map(c=>`<div class="swatch ${window.casaTheme.accent.toLowerCase()===c.toLowerCase()?'sel':''}" style="background:${c}" title="${c}" onclick="App.setThemeAccent('${c}')"></div>`).join('')}</div>
+        </div>
+        <div class="field" style="margin-top:14px;"><label>Modo</label>
+          <div class="mode-options">
+            <button class="${window.casaTheme.mode==='light'?'selected':''}" onclick="App.setThemeMode('light')">☀ Claro</button>
+            <button class="${window.casaTheme.mode==='dark'?'selected':''}" onclick="App.setThemeMode('dark')">☾ Oscuro</button>
+            <button class="${window.casaTheme.mode==='auto'?'selected':''}" onclick="App.setThemeMode('auto')">◐ Automático</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px;">
       <div class="panel-header"><div class="panel-title">${icon('download')} Respaldo de datos</div></div>
       <div class="panel-body" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <div class="page-sub" style="flex:1; min-width:220px;">Descarga tus movimientos como CSV, o un respaldo completo en JSON.</div>
@@ -2136,6 +2263,8 @@ window.App = {
   setGastosCycle(v){ state.gastosCycle = v; render(); },
   setGastosGranularity(v){ state.gastosGranularity = v; state.gastosCycle = null; render(); },
   setCuentasTab(t){ state.cuentasTab = t; render(); },
+  setThemeAccent(color){ window.casaTheme.accent = color; localStorage.setItem(window.CASA_THEME_KEY, JSON.stringify(window.casaTheme)); window.applyTheme(); render(); },
+  setThemeMode(mode){ window.casaTheme.mode = mode; localStorage.setItem(window.CASA_THEME_KEY, JSON.stringify(window.casaTheme)); window.applyTheme(); render(); },
 
   openMemberSwitch(){ modalMemberSwitch(); },
   selectMember(id){ state.memberId=id; localStorage.setItem(MEMBER_KEY, id); closeModal(); render(); },
