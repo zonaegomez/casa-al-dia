@@ -409,6 +409,7 @@ const MEMBER_KEY = 'casa_al_dia_member_id';
 
 /* ---------------- utils ---------------- */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function jsStr(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function uid(){ return 'l' + Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function fmtMoney(n){
@@ -512,7 +513,7 @@ function emptyBlock(iconName, text){ return `<div class="empty"><div class="empt
 
 /* ---------------- state ---------------- */
 let state = {
-  members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [],
+  members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [], settlements: [],
   settings: {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0, budgetByCategory:{}, cycleStartDay:1},
   page: 'dashboard',
   memberId: localStorage.getItem(MEMBER_KEY) || null,
@@ -534,7 +535,7 @@ function saveLocalSnapshot(){
     localStorage.setItem(LOCAL_KEY, JSON.stringify({
       members:state.members, items:state.items, movements:state.movements,
       bills:state.bills, reminders:state.reminders, settings:state.settings,
-      closedCycles:state.closedCycles
+      closedCycles:state.closedCycles, settlements:state.settlements
     }));
   }catch(e){}
 }
@@ -654,6 +655,10 @@ function subscribeAll(){
   }, ()=>{});
   db.collection('closedCycles').onSnapshot(snap=>{
     state.closedCycles = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+    render();
+  }, ()=>{});
+  db.collection('settlements').onSnapshot(snap=>{
+    state.settlements = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
     render();
   }, ()=>{});
   db.doc('settings/config').onSnapshot(snap=>{
@@ -1111,6 +1116,10 @@ function allCycleKeys(){
   keys.add(cycleKeyFor(todayISO()));
   return Array.from(keys).sort();
 }
+function isCycleClosed(dateIso){
+  const k = cycleKeyFor(dateIso);
+  return (state.closedCycles||[]).some(c=> c.cycleKey===k || c.id===k);
+}
 function computeStatsForPeriod(periodKey, granularity){
   const byCat = {};
   let total = 0;
@@ -1143,12 +1152,18 @@ function computeBalances(periodKey, granularity){
   });
   const unassigned = rows.filter(r=> !r.memberId || !paidByMember.hasOwnProperty(r.memberId))
                           .reduce((s,r)=>s+r.amount,0);
-  const balances = activeMembers.map(m=>({
-    member: m,
-    paid: paidByMember[m.id]||0,
-    fairShare,
-    balance: (paidByMember[m.id]||0) - fairShare // positive = le deben, negative = debe
-  }));
+  // Transferencias ya marcadas como pagadas en este periodo: ajustan el saldo de
+  // cada integrante antes de sugerir nuevas transferencias, para no repetir lo que
+  // ya se pagó.
+  const periodSettlements = (state.settlements||[]).filter(s=> s.periodKey===periodKey && s.granularity===granularity);
+  const balances = activeMembers.map(m=>{
+    let balance = (paidByMember[m.id]||0) - fairShare; // positive = le deben, negative = debe
+    periodSettlements.forEach(s=>{
+      if(s.fromId===m.id) balance += Number(s.amount)||0; // ya pagó su deuda
+      if(s.toId===m.id) balance -= Number(s.amount)||0;   // ya le pagaron lo que le debían
+    });
+    return { member: m, paid: paidByMember[m.id]||0, fairShare, balance };
+  });
   // Greedy settle-up: whoever owes pays whoever is owed, in descending amounts.
   const creditors = balances.filter(b=>b.balance>0.5).map(b=>({id:b.member.id, name:b.member.name, amt:b.balance})).sort((a,b)=>b.amt-a.amt);
   const debtors = balances.filter(b=>b.balance<-0.5).map(b=>({id:b.member.id, name:b.member.name, amt:-b.balance})).sort((a,b)=>b.amt-a.amt);
@@ -1157,12 +1172,12 @@ function computeBalances(periodKey, granularity){
   while(ci<creditors.length && di<debtors.length){
     const c = creditors[ci], d = debtors[di];
     const amt = Math.min(c.amt, d.amt);
-    if(amt>0.5) transfers.push({from:d.name, to:c.name, amount:amt});
+    if(amt>0.5) transfers.push({fromId:d.id, from:d.name, toId:c.id, to:c.name, amount:amt});
     c.amt -= amt; d.amt -= amt;
     if(c.amt<=0.5) ci++;
     if(d.amt<=0.5) di++;
   }
-  return {total, fairShare, balances, transfers, unassigned};
+  return {total, fairShare, balances, transfers, unassigned, settlements: periodSettlements};
 }
 
 /* ---------------- charts ---------------- */
@@ -1481,10 +1496,26 @@ function pageSaldos(){
         ${b.transfers.length ? b.transfers.map(t=>`<div class="list-item">
           <div class="list-icon">${icon('wallet')}</div>
           <div class="list-main"><div class="list-title">${esc(t.from)} le transfiere a ${esc(t.to)}</div></div>
-          <div class="list-end"><span style="font-weight:700;">${fmtMoney(t.amount)}</span></div>
+          <div class="list-end" style="display:flex; align-items:center; gap:10px;">
+            <span style="font-weight:700;">${fmtMoney(t.amount)}</span>
+            <button class="btn btn-sm" onclick="App.markTransferPaid('${activeCycle}','${gran}','${t.fromId}','${jsStr(t.from)}','${t.toId}','${jsStr(t.to)}',${Math.round(t.amount*100)/100})">Ya se pagó</button>
+          </div>
         </div>`).join('') : emptyBlock('check','Todos están al parejo — nadie le debe a nadie en este periodo.')}
       </div>
-    </div>`}
+    </div>
+    ${b.settlements.length ? `<div class="panel" style="margin-top:14px;">
+      <div class="panel-header"><div class="panel-title">${icon('check')} Transferencias ya registradas en este periodo</div></div>
+      <div class="panel-body pad0">
+        ${b.settlements.map(s=>`<div class="list-item">
+          <div class="list-icon">${icon('check')}</div>
+          <div class="list-main"><div class="list-title">${esc(s.fromName)} le transfirió a ${esc(s.toName)}</div><div class="list-sub">${s.date?fmtDate(s.date):''}</div></div>
+          <div class="list-end" style="display:flex; align-items:center; gap:10px;">
+            <span style="font-weight:700;">${fmtMoney(Number(s.amount)||0)}</span>
+            <button class="btn btn-sm btn-ghost" onclick="App.confirmUndoSettlement('${s.id}')" title="Deshacer">${icon('x')}</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}`}
   `;
 }
 
@@ -2178,14 +2209,21 @@ window.App = {
     closeModal(); toast('Gasto agregado'); render();
   },
 
-  openEditMovement(id){ modalEditMovement(id); },
+  openEditMovement(id){
+    const m = state.movements.find(x=>x.id===id);
+    if(m && isCycleClosed(m.date)){ toast('Ese ciclo ya está cerrado y no se puede editar.'); return; }
+    modalEditMovement(id);
+  },
   async saveEditMovement(id){
+    const m = state.movements.find(x=>x.id===id);
+    if(m && isCycleClosed(m.date)){ toast('Ese ciclo ya está cerrado y no se puede editar.'); closeModal(); return; }
     const name = document.getElementById('emName').value.trim();
     const amount = Number(document.getElementById('emAmount').value)||0;
     const date = document.getElementById('emDate').value || todayISO();
     const category = document.getElementById('emCat').value;
     const memberId = document.getElementById('emMember').value || null;
     if(!name){ toast('Descríbelo brevemente'); return; }
+    if(isCycleClosed(date)){ toast('No puedes mover este gasto a un ciclo ya cerrado.'); return; }
     const mem = memberId ? state.members.find(x=>x.id===memberId) : null;
     await Data.set('movements', id, {
       itemName:name, category, total:amount, date,
@@ -2195,6 +2233,7 @@ window.App = {
   },
   confirmDeleteMovement(id){
     const m = state.movements.find(x=>x.id===id);
+    if(m && isCycleClosed(m.date)){ toast('Ese ciclo ya está cerrado y no se puede eliminar.'); return; }
     const label = m ? `"${m.itemName||'este gasto'}" (${fmtMoney(Number(m.total)||0)})` : 'este gasto';
     if(confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`)){
       Data.del('movements', id); closeModal(); toast('Gasto eliminado'); render();
@@ -2230,12 +2269,20 @@ window.App = {
   },
 
   openBillHistory(id){ modalBillHistory(id); },
-  openEditBillPayment(billId, idx){ modalEditBillPayment(billId, idx); },
+  openEditBillPayment(billId, idx){
+    const b = state.bills.find(x=>x.id===billId);
+    const h = b && (b.history||[])[idx];
+    if(h && isCycleClosed(h.paidAt)){ toast('Ese ciclo ya está cerrado y no se puede editar.'); return; }
+    modalEditBillPayment(billId, idx);
+  },
   async saveEditBillPayment(billId, idx){
     const b = state.bills.find(x=>x.id===billId);
     if(!b) return;
+    const existing = (b.history||[])[idx];
+    if(existing && isCycleClosed(existing.paidAt)){ toast('Ese ciclo ya está cerrado y no se puede editar.'); closeModal(); return; }
     const amount = Number(document.getElementById('bpAmount').value)||0;
     const paidAt = document.getElementById('bpDate').value || todayISO();
+    if(isCycleClosed(paidAt)){ toast('No puedes mover este pago a un ciclo ya cerrado.'); return; }
     const memberId = document.getElementById('bpMember').value || null;
     const mem = memberId ? state.members.find(x=>x.id===memberId) : null;
     const history = (b.history||[]).slice();
@@ -2249,6 +2296,7 @@ window.App = {
     const b = state.bills.find(x=>x.id===billId);
     if(!b) return;
     const h = (b.history||[])[idx];
+    if(h && isCycleClosed(h.paidAt)){ toast('Ese ciclo ya está cerrado y no se puede eliminar.'); return; }
     const label = h ? `${fmtMoney(Number(h.amount)||0)} del ${fmtDate(h.paidAt)}` : 'este pago';
     if(confirm(`¿Eliminar el pago de ${label}? Esta acción no se puede deshacer.`)){
       const history = (b.history||[]).slice();
@@ -2280,6 +2328,20 @@ window.App = {
     toast('Ciclo cerrado'); render();
   },
 
+  async markTransferPaid(periodKey, granularity, fromId, fromName, toId, toName, amount){
+    if(!confirm(`¿Confirmas que ${fromName} ya le transfirió ${fmtMoney(Number(amount)||0)} a ${toName}?`)) return;
+    await Data.add('settlements', {
+      periodKey, granularity, fromId, fromName, toId, toName,
+      amount: Number(amount)||0, date: todayISO()
+    });
+    toast('Transferencia registrada'); render();
+  },
+  confirmUndoSettlement(id){
+    if(confirm('¿Deshacer esta transferencia registrada? Volverá a aparecer como pendiente.')){
+      Data.del('settlements', id); toast('Transferencia deshecha'); render();
+    }
+  },
+
   async saveConfig(){
     const data = {
       householdName: document.getElementById('cfgHouseholdName').value.trim() || 'Mi Casa',
@@ -2305,7 +2367,7 @@ window.App = {
     downloadFile('gastos_casa.csv', csv);
   },
   exportJSON(){
-    const payload = JSON.stringify({members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings, closedCycles:state.closedCycles}, null, 2);
+    const payload = JSON.stringify({members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings, closedCycles:state.closedCycles, settlements:state.settlements}, null, 2);
     downloadFile('respaldo_casa.json', payload);
   },
 
