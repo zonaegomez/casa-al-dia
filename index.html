@@ -2296,7 +2296,7 @@ function modalMovement(type, itemId){
 }
 
 let ticketRowSeq = 0;
-function ticketRowHtml(items, itemId){
+function ticketRowHtml(items, itemId, freeName, cost){
   const rowId = 'tkrow'+(ticketRowSeq++);
   const isFree = !itemId || itemId==='__free__';
   const freeCats = INVENTORY_CATS.concat(['servicio','otro']);
@@ -2319,15 +2319,19 @@ function ticketRowHtml(items, itemId){
   </div>`;
 }
 function modalTicket(prefillItemIds, scannedLines){
-  if(!state.items.length && !(scannedLines && scannedLines.length)){ toast('Primero agrega un artículo'); return; }
   ticketRowSeq = 0;
   const items = state.items.slice().sort((a,b)=>a.name.localeCompare(b.name));
   let rowsHtml;
   if(scannedLines && scannedLines.length){
     rowsHtml = scannedLines.map(l=> ticketRowHtml(items, l.itemId || '__free__', l.itemId ? null : l.name, l.price)).join('');
+  } else if(prefillItemIds && prefillItemIds.length){
+    rowsHtml = prefillItemIds.map(id=>ticketRowHtml(items, id, null, null)).join('');
+  } else if(items.length){
+    // Sin artículos preseleccionados: parte de una sola línea con el primer artículo del catálogo.
+    rowsHtml = ticketRowHtml(items, items[0].id, null, null);
   } else {
-    const ids = (prefillItemIds && prefillItemIds.length) ? prefillItemIds : [items[0].id];
-    rowsHtml = ids.map(id=>ticketRowHtml(items, id, null, null)).join('');
+    // Inventario vacío: igual se puede capturar el ticket con líneas libres (no vinculadas a Inventario).
+    rowsHtml = ticketRowHtml(items, '__free__', null, null);
   }
   openModal(`
     <div class="modal-header"><h3>Ticket de compra</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
@@ -2628,7 +2632,11 @@ window.App = {
   },
 
   openMovement(type, itemId){
-    if(!state.items.length){ toast('Primero agrega un artículo'); return; }
+    if(!state.items.length){
+      toast('Primero agrega un artículo a tu Inventario — te abrimos el formulario');
+      modalItemForm(null, INVENTORY_CATS[0]);
+      return;
+    }
     modalMovement(type, itemId);
   },
   updateMovementBrandHint(){
