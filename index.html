@@ -1275,8 +1275,15 @@ function topMembersThisCycle(limit){
   state.bills.forEach(b=>{
     (b.history||[]).forEach(h=>{
       if(cycleKeyFor(h.paidAt) !== cycle) return;
-      const s = stats[h.memberId]; if(!s) return;
-      s.gasto += Number(h.amount)||0;
+      if(Array.isArray(h.splits) && h.splits.length){
+        h.splits.forEach(sp=>{
+          const s = stats[sp.memberId]; if(!s) return;
+          s.gasto += Number(sp.amount)||0;
+        });
+      } else {
+        const s = stats[h.memberId]; if(!s) return;
+        s.gasto += Number(h.amount)||0;
+      }
     });
   });
   return Object.values(stats).sort((a,b)=>b.gasto-a.gasto).slice(0, limit||4);
@@ -1308,7 +1315,16 @@ function allExpenseRows(){
   });
   state.bills.forEach(b=>{
     (b.history||[]).forEach(h=>{
-      rows.push({date:h.paidAt, category:'servicio', name:b.name, amount:Number(h.amount)||0, memberName:h.memberName, memberId:h.memberId, source:'bill', ref:b, period:h.period});
+      if(Array.isArray(h.splits) && h.splits.length){
+        // Pago dividido: cada integrante ya puso su parte directamente, así que
+        // cada porción se reporta por separado pero NO participa en el Saldo
+        // entre integrantes (no hay deuda interna que repartir: ya quedó cruzado).
+        h.splits.forEach(s=>{
+          rows.push({date:h.paidAt, category:'servicio', name:b.name, amount:Number(s.amount)||0, memberName:s.memberName, memberId:s.memberId, source:'bill', ref:b, period:h.period, splitPayment:true});
+        });
+      } else {
+        rows.push({date:h.paidAt, category:'servicio', name:b.name, amount:Number(h.amount)||0, memberName:h.memberName, memberId:h.memberId, source:'bill', ref:b, period:h.period});
+      }
     });
   });
   rows.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
@@ -1352,7 +1368,9 @@ function allPeriodKeys(granularity){
 }
 /* ---------------- balances / saldo entre integrantes ---------------- */
 function computeBalances(periodKey, granularity){
-  const rows = allExpenseRows().filter(r=> periodKeyFor(r.date, granularity) === periodKey);
+  // Los pagos ya divididos directamente entre integrantes (splitPayment) se excluyen:
+  // cada quien puso su propia parte, no hay deuda interna que esta vista deba resolver.
+  const rows = allExpenseRows().filter(r=> periodKeyFor(r.date, granularity) === periodKey && !r.splitPayment);
   const total = rows.reduce((s,r)=>s+r.amount,0);
   const activeMembers = state.members.length ? state.members : [];
   const n = activeMembers.length;
@@ -2396,10 +2414,19 @@ function modalBillForm(id){
 function modalPayBill(id){
   const b = state.bills.find(x=>x.id===id);
   if(!b) return;
+  const members = state.members.slice().sort((a,b)=>a.name.localeCompare(b.name));
   openModal(`
     <div class="modal-header"><h3>Pagar ${esc(b.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
-      <div class="field"><label>Monto pagado (MXN)</label><input id="payAmount" type="number" step="any" min="0" value="${b.amountEstimate||0}"></div>
+      ${members.length>1 ? `<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" id="paySplitToggle" onchange="App.toggleBillPaymentSplit()">
+        <span style="font-size:13px;">Se pagó entre varios integrantes (cada uno puso su parte)</span>
+      </label>` : ''}
+      <div class="field" id="payAmountWrap"><label>Monto pagado (MXN)</label><input id="payAmount" type="number" step="any" min="0" value="${b.amountEstimate||0}"></div>
+      <div id="paySplitRows" style="display:none;">
+        ${members.map(m=>`<div class="field"><label>${esc(m.name)}</label><input class="pay-split-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="0" oninput="App.recalcSplitTotal()"></div>`).join('')}
+        <div class="page-sub" id="paySplitTotalLabel" style="margin-top:-4px;">Total dividido: ${fmtMoney(0)}</div>
+      </div>
       <div class="field"><label>Fecha de pago</label><input id="payDate" type="date" value="${todayISO()}"></div>
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveBillPayment('${id}')">Confirmar pago</button></div>
@@ -2415,7 +2442,7 @@ function modalBillHistory(billId){
     <div class="modal-body" style="padding:0;">
       ${entries.length ? entries.map(h=>`<div class="list-item">
         <div class="list-icon">${icon('cash')}</div>
-        <div class="list-main"><div class="list-title">${fmtMoney(Number(h.amount)||0)}</div><div class="list-sub">${fmtDate(h.paidAt)} · ${esc(h.memberName||'—')}</div></div>
+        <div class="list-main"><div class="list-title">${fmtMoney(Number(h.amount)||0)}</div><div class="list-sub">${fmtDate(h.paidAt)} · ${Array.isArray(h.splits)&&h.splits.length ? 'Dividido: '+h.splits.map(s=>`${esc(s.memberName)} ${fmtMoney(Number(s.amount)||0)}`).join(' · ') : esc(h.memberName||'—')}</div></div>
         <div class="list-end" style="display:flex; gap:4px;">
           <button class="btn btn-sm btn-ghost" onclick="App.openEditBillPayment('${billId}', ${h._idx})" title="Editar">${icon('edit')}</button>
           <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteBillPayment('${billId}', ${h._idx})" title="Eliminar">${icon('trash')}</button>
@@ -2430,12 +2457,21 @@ function modalEditBillPayment(billId, idx){
   const h = b && (b.history||[])[idx];
   if(!b || !h){ toast('No se encontró ese pago'); return; }
   const members = state.members.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const isSplit = Array.isArray(h.splits) && h.splits.length;
   openModal(`
     <div class="modal-header"><h3>Editar pago</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
-      <div class="field"><label>Monto pagado (MXN)</label><input id="bpAmount" type="number" step="any" min="0" value="${Number(h.amount)||0}"></div>
+      ${members.length>1 ? `<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" id="bpSplitToggle" ${isSplit?'checked':''} onchange="App.toggleEditBillPaymentSplit()">
+        <span style="font-size:13px;">Se pagó entre varios integrantes (cada uno puso su parte)</span>
+      </label>` : ''}
+      <div class="field" id="bpAmountWrap" style="${isSplit?'display:none;':''}"><label>Monto pagado (MXN)</label><input id="bpAmount" type="number" step="any" min="0" value="${Number(h.amount)||0}"></div>
+      <div id="bpSplitRows" style="${isSplit?'':'display:none;'}">
+        ${members.map(m=>{ const sp = isSplit ? h.splits.find(s=>s.memberId===m.id) : null; return `<div class="field"><label>${esc(m.name)}</label><input class="bp-split-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="${sp?Number(sp.amount)||0:0}" oninput="App.recalcEditSplitTotal()"></div>`; }).join('')}
+        <div class="page-sub" id="bpSplitTotalLabel" style="margin-top:-4px;">Total dividido: ${fmtMoney(isSplit?Number(h.amount)||0:0)}</div>
+      </div>
       <div class="field"><label>Fecha de pago</label><input id="bpDate" type="date" value="${h.paidAt||todayISO()}"></div>
-      <div class="field"><label>¿Quién lo pagó?</label>
+      <div class="field" id="bpMemberWrap" style="${isSplit?'display:none;':''}"><label>¿Quién lo pagó?</label>
         <select id="bpMember">
           <option value="" ${!h.memberId?'selected':''}>— Sin asignar —</option>
           ${members.map(mb=>`<option value="${mb.id}" ${mb.id===h.memberId?'selected':''}>${esc(mb.name)}</option>`).join('')}
@@ -2857,13 +2893,44 @@ window.App = {
   },
   confirmDeleteBill(id){ if(confirm('¿Eliminar este servicio?')){ Data.del('bills', id); closeModal(); toast('Servicio eliminado'); } },
   openPayBill(id){ modalPayBill(id); },
+  toggleBillPaymentSplit(){
+    const toggle = document.getElementById('paySplitToggle');
+    const on = toggle && toggle.checked;
+    const rows = document.getElementById('paySplitRows');
+    const amountWrap = document.getElementById('payAmountWrap');
+    if(rows) rows.style.display = on ? '' : 'none';
+    if(amountWrap) amountWrap.style.display = on ? 'none' : '';
+    if(on) App.recalcSplitTotal();
+  },
+  recalcSplitTotal(){
+    const inputs = Array.from(document.querySelectorAll('.pay-split-input'));
+    const total = inputs.reduce((s,i)=> s + (Number(i.value)||0), 0);
+    const label = document.getElementById('paySplitTotalLabel');
+    if(label) label.textContent = `Total dividido: ${fmtMoney(total)}`;
+    const amt = document.getElementById('payAmount');
+    if(amt) amt.value = total;
+  },
   async saveBillPayment(id){
     const b = state.bills.find(x=>x.id===id);
     if(!b) return;
-    const amount = Number(document.getElementById('payAmount').value)||0;
     const paidAt = document.getElementById('payDate').value || todayISO();
-    const mem = currentMember();
-    const history = (b.history||[]).concat([{amount, paidAt, period:cycleKeyFor(b.nextDueDate||paidAt), memberId: mem?mem.id:null, memberName: mem?mem.name:'—'}]);
+    const splitToggle = document.getElementById('paySplitToggle');
+    const splitOn = splitToggle && splitToggle.checked;
+    let amount, memberId=null, memberName='—', splits=null;
+    if(splitOn){
+      const inputs = Array.from(document.querySelectorAll('.pay-split-input'));
+      splits = inputs.map(i=>({memberId:i.dataset.member, memberName:i.dataset.name, amount:Number(i.value)||0})).filter(s=>s.amount>0);
+      amount = splits.reduce((s,x)=>s+x.amount,0);
+      if(!splits.length || amount<=0){ toast('Captura cuánto puso cada integrante'); return; }
+      memberName = 'Dividido: '+splits.map(s=>`${s.memberName} ${fmtMoney(s.amount)}`).join(' · ');
+    } else {
+      amount = Number(document.getElementById('payAmount').value)||0;
+      const mem = currentMember();
+      memberId = mem?mem.id:null; memberName = mem?mem.name:'—';
+    }
+    const entry = {amount, paidAt, period:cycleKeyFor(b.nextDueDate||paidAt), memberId, memberName};
+    if(splits) entry.splits = splits;
+    const history = (b.history||[]).concat([entry]);
     const months = CYCLE_MONTHS[b.cycle]||1;
     const nextDueDate = addMonths(b.nextDueDate||paidAt, months);
     await Data.set('bills', id, {history, nextDueDate, amountEstimate: amount||b.amountEstimate}, true);
@@ -2877,19 +2944,52 @@ window.App = {
     if(h && isCycleClosed(h.paidAt)){ toast('Ese ciclo ya está cerrado y no se puede editar.'); return; }
     modalEditBillPayment(billId, idx);
   },
+  toggleEditBillPaymentSplit(){
+    const toggle = document.getElementById('bpSplitToggle');
+    const on = toggle && toggle.checked;
+    const rows = document.getElementById('bpSplitRows');
+    const amountWrap = document.getElementById('bpAmountWrap');
+    const memberWrap = document.getElementById('bpMemberWrap');
+    if(rows) rows.style.display = on ? '' : 'none';
+    if(amountWrap) amountWrap.style.display = on ? 'none' : '';
+    if(memberWrap) memberWrap.style.display = on ? 'none' : '';
+    if(on) App.recalcEditSplitTotal();
+  },
+  recalcEditSplitTotal(){
+    const inputs = Array.from(document.querySelectorAll('.bp-split-input'));
+    const total = inputs.reduce((s,i)=> s + (Number(i.value)||0), 0);
+    const label = document.getElementById('bpSplitTotalLabel');
+    if(label) label.textContent = `Total dividido: ${fmtMoney(total)}`;
+    const amt = document.getElementById('bpAmount');
+    if(amt) amt.value = total;
+  },
   async saveEditBillPayment(billId, idx){
     const b = state.bills.find(x=>x.id===billId);
     if(!b) return;
     const existing = (b.history||[])[idx];
     if(existing && isCycleClosed(existing.paidAt)){ toast('Ese ciclo ya está cerrado y no se puede editar.'); closeModal(); return; }
-    const amount = Number(document.getElementById('bpAmount').value)||0;
     const paidAt = document.getElementById('bpDate').value || todayISO();
     if(isCycleClosed(paidAt)){ toast('No puedes mover este pago a un ciclo ya cerrado.'); return; }
-    const memberId = document.getElementById('bpMember').value || null;
-    const mem = memberId ? state.members.find(x=>x.id===memberId) : null;
+    const splitToggle = document.getElementById('bpSplitToggle');
+    const splitOn = splitToggle && splitToggle.checked;
     const history = (b.history||[]).slice();
     if(!history[idx]) return;
-    history[idx] = Object.assign({}, history[idx], {amount, paidAt, memberId: mem?mem.id:null, memberName: mem?mem.name:'—'});
+    let updated;
+    if(splitOn){
+      const inputs = Array.from(document.querySelectorAll('.bp-split-input'));
+      const splits = inputs.map(i=>({memberId:i.dataset.member, memberName:i.dataset.name, amount:Number(i.value)||0})).filter(s=>s.amount>0);
+      const amount = splits.reduce((s,x)=>s+x.amount,0);
+      if(!splits.length || amount<=0){ toast('Captura cuánto puso cada integrante'); return; }
+      const memberName = 'Dividido: '+splits.map(s=>`${s.memberName} ${fmtMoney(s.amount)}`).join(' · ');
+      updated = Object.assign({}, history[idx], {amount, paidAt, memberId:null, memberName, splits});
+    } else {
+      const amount = Number(document.getElementById('bpAmount').value)||0;
+      const memberId = document.getElementById('bpMember').value || null;
+      const mem = memberId ? state.members.find(x=>x.id===memberId) : null;
+      updated = Object.assign({}, history[idx], {amount, paidAt, memberId: mem?mem.id:null, memberName: mem?mem.name:'—'});
+      delete updated.splits;
+    }
+    history[idx] = updated;
     await Data.set('bills', billId, {history}, true);
     toast('Pago actualizado'); render();
     modalBillHistory(billId);
