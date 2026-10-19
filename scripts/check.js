@@ -1,0 +1,5 @@
+const fs=require('node:fs');const vm=require('node:vm');
+for(const file of ['core.js','store.js',...['api','server','scripts'].flatMap(dir=>fs.readdirSync(dir).filter(x=>x.endsWith('.js')).map(x=>dir+'/'+x))])new vm.Script(fs.readFileSync(file,'utf8'),{filename:file});
+const html=fs.readFileSync('index.html','utf8');let i=0;
+for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)){if(match[1].trim())new vm.Script(match[1],{filename:'inline-'+(++i)});}
+console.log('Sintaxis válida: scripts externos e inline');

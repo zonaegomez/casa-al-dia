@@ -1,0 +1,44 @@
+{
+  "functions": {
+    "api/parse-ticket.js": {
+      "maxDuration": 30
+    },
+    "api/close-cycle.js": {
+      "maxDuration": 30
+    },
+    "api/settle.js": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
+  ],
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "framework": null
+}
