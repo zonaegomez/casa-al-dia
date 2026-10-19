@@ -7,7 +7,7 @@ La rama de integridad cambia el acceso anónimo por cuentas autorizadas. **No se
 
 ## Desarrollo
 
-Node.js 22. Para las reglas: Java 21 o posterior.
+Node.js 24.15 o posterior dentro de la rama 24.x. Para las reglas: Java 21 o posterior.
 
 ```sh
 npm ci

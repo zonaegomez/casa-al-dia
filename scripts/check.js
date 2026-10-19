@@ -1,3 +1,5 @@
+const [nodeMajor,nodeMinor]=process.versions.node.split('.').map(Number);
+if(nodeMajor!==24||nodeMinor<15)throw Error('Usa Node 24.15 o posterior dentro de la rama 24.x; las dependencias no soportan Node 22.');
 const fs=require('node:fs');const vm=require('node:vm');
 for(const file of ['core.js','store.js',...['api','server','scripts'].flatMap(dir=>fs.readdirSync(dir).filter(x=>x.endsWith('.js')).map(x=>dir+'/'+x))])new vm.Script(fs.readFileSync(file,'utf8'),{filename:file});
 const html=fs.readFileSync('index.html','utf8');let i=0;

@@ -20,6 +20,8 @@ El reparto nuevo es igualitario entre miembros activos. Para gastos personales o
 
 Solo usuarios con cuenta no anónima y `access/{uid}.enabled == true` pueden operar. No pueden autorizarse a sí mismos. Configuraciones presupuestales y cierres requieren admin. Las reglas protegen creación/modificación de movimientos y pagos en periodos cerrados; los cierres solo se crean desde servidor. Las reglas validan tipos y límites básicos; el núcleo valida repartos, cantidades y consistencia de montos. El cierre vuelve a validar el libro.
 
+El contador `revision` coordina transacciones y cierres; NO es una barrera contra escrituras directas del SDK. Un usuario autorizado puede construir un batch que también incremente ese contador. La autorización real está en Authentication, la lista de acceso y las reglas.
+
 Esto es una aplicación doméstica para un grupo autorizado, no un libro contable legal ni un sistema contra administradores maliciosos. Un integrante autorizado aún puede escribir documentos directamente con su SDK; la validación de cada regla de negocio no está completamente centralizada en servidor. Antes de abrir a terceros, llevar todos los comandos financieros a endpoints y autorizar por casa/rol con esquemas estrictos, no ampliar las reglas actuales.
 
 El lector verifica el token en servidor, consulta la allowlist y limita persistentemente por UID a 2 solicitudes/minuto y 20/día. No devuelve errores privados del proveedor. Las imágenes admitidas se validan por tipo, tamaño y cabecera; la revisión humana del resultado sigue siendo obligatoria. Configurar en Firestore una política TTL para `apiUsage.expiresAt` permite retirar contadores vencidos sin tocar los registros financieros.
@@ -40,5 +42,5 @@ No hay recordatorios automáticos programados; se muestran pendientes y se compa
 - Pruebas con conflictos transaccionales, reintentos, fallos de commit y operación repetida.
 - Integración de formularios/comandos con datos ficticios.
 - Emulador real de Firestore: acceso, cierres, escritura real, migración repetida, más de 400 movimientos y respaldo/restauración.
-- El pipeline ejecuta sintaxis, pruebas y reglas en Node 22 / Java 21.
+- El pipeline ejecuta sintaxis, pruebas y reglas en Node 24 / Java 21.
 - Un ensayo en emulador no acredita configuración ni saldos reales de producción. La llamada real a Anthropic y el despliegue necesitan credenciales y verificación en staging.

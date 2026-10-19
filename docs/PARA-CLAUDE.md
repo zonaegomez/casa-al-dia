@@ -8,7 +8,7 @@ Núcleo determinista, transacciones y comprobantes de operación; compras/ticket
 
 ## Antes de integrar
 
-1. Ejecuta `npm ci`, `npm run check`, `npm test`, `npm run test:rules` y `npm run build`. Java 21 para el emulador.
+1. Ejecuta `npm ci`, `npm run check`, `npm test`, `npm run test:rules` y `npm run build`. Node 24.15 o posterior dentro de 24.x y Java 21 para el emulador.
 2. Usa Firebase separado para staging y configura las variables de Preview. No conectes pruebas interactivas a producción.
 3. Verifica el flujo completo en dos dispositivos, incluyendo permisos y sesión vencida. No describas como probado lo que solo inspeccionaste.
 4. Revisa la auditoría de datos reales con el responsable. No infieras beneficiarios antiguos; no recalcule cierres firmes ni borres duplicados sin identificarlos y conciliarlos.
