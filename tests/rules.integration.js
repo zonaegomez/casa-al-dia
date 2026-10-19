@@ -1,0 +1,76 @@
+const {test,before,after,beforeEach}=require('node:test');
+const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
+const {doc,getDoc,setDoc,writeBatch}=require('firebase/firestore');const fs=require('node:fs');
+let env;
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-casa-al-dia',firestore:{host:'127.0.0.1',port:8088,rules:fs.readFileSync('firestore.rules','utf8')}});});
+after(async()=>{if(env)await env.cleanup();});
+beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async ctx=>{
+ const db=ctx.firestore();await setDoc(doc(db,'access/user'),{enabled:true,role:'member'});await setDoc(doc(db,'access/admin'),{enabled:true,role:'admin'});
+ await setDoc(doc(db,'settings/config'),{cycleStartDay:15,currency:'MXN',revision:0,legacyParticipantIds:['a','b']});await setDoc(doc(db,'closedCycles/2026-09'),{total:100});
+ await setDoc(doc(db,'bills/luz'),{name:'Luz',history:[{paidAt:'2026-09-20',amount:100}],nextDueDate:'2026-10-20',amountEstimate:100});
+});});
+const dbFor=(uid='user',provider='password')=>env.authenticatedContext(uid,{firebase:{sign_in_provider:provider}}).firestore();
+function purchase(db,date){const batch=writeBatch(db);batch.update(doc(db,'settings/config'),{revision:1,updatedBy:'user'});batch.set(doc(db,'movements/p'),{date,type:'compra',qty:1,total:10,unitCost:10,itemId:null,memberId:'a',participantIds:['a','b'],updatedBy:'user'});return batch.commit();}
+test('rechaza sesiones anónimas aun si su UID figura en allowlist',async()=>{await assertFails(getDoc(doc(dbFor('user','anonymous'),'bills/luz')));});
+test('rechaza cuenta no autorizada',async()=>{await assertFails(getDoc(doc(dbFor('stranger'),'bills/luz')));});
+test('miembro autorizado puede leer',async()=>{await assertSucceeds(getDoc(doc(dbFor(),'bills/luz')));});
+test('no permite autoautorizarse ni crear cierres desde cliente',async()=>{const db=dbFor();await assertFails(setDoc(doc(db,'access/user'),{enabled:true,role:'admin'}));await assertFails(setDoc(doc(db,'closedCycles/2026-10'),{total:0}));});
+test('rechaza escritura en ciclo cerrado con inicio personalizado',async()=>{await assertFails(purchase(dbFor(),'2026-10-01'));});
+test('acepta compra transaccional en ciclo abierto',async()=>{await assertSucceeds(purchase(dbFor(),'2026-10-19'));});
+test('rechaza modificación del historial incrustado anterior',async()=>{const db=dbFor();const b=writeBatch(db);b.update(doc(db,'settings/config'),{revision:1,updatedBy:'user'});b.update(doc(db,'bills/luz'),{history:[],updatedBy:'user'});await assertFails(b.commit());});
+test('no permite cambiar el inicio de ciclo ni al administrador',async()=>{const db=dbFor('admin');await assertFails(setDoc(doc(db,'settings/config'),{cycleStartDay:1,currency:'MXN',updatedBy:'admin',revision:1,legacyParticipantIds:['a','b']}));});
+test('no permite reescribir ni borrar comprobante de operación',async()=>{const db=dbFor();await assertSucceeds(setDoc(doc(db,'operations/p'),{actorUid:'user',paths:[]}));await assertFails(setDoc(doc(db,'operations/p'),{actorUid:'user',paths:['changed']}));});
+test('la capa de escritura real funciona con las reglas: compra, pago y desactivación',async()=>{
+ const sdk=dbFor(),{runTransaction}=require('firebase/firestore'),create=require('../store'),C=require('../core');
+ const db={doc:path=>doc(sdk,path),collection:name=>({doc:id=>doc(sdk,name+'/'+id)}),runTransaction:fn=>runTransaction(sdk,tx=>fn({get:async r=>{const s=await tx.get(r);return {exists:s.exists(),data:()=>s.data()};},set:(r,v)=>tx.set(r,v),delete:r=>tx.delete(r)}))};
+ let n=0;const store=create({state:{members:[{id:'a'},{id:'b'}]},core:C,db:()=>db,actor:()=>'user',ready:()=>true,newId:()=>`real-${++n}`});
+ await assertSucceeds(store.atomic({opId:'real-purchase'},async t=>{await t.put('items','rice',{name:'Arroz',currentQty:2,minQty:0},false);await t.put('movements','m1',{type:'compra',itemId:'rice',qty:2,total:10,unitCost:5,date:'2026-10-19',memberId:'a',participantIds:['a','b']},false);}));
+ await assertSucceeds(store.atomic({opId:'real-payment'},async t=>{await t.put('billPayments','p1',{billId:'luz',paidAt:'2026-10-19',amount:100,memberId:'a',participantIds:['a','b']},false);await t.put('bills','luz',{nextDueDate:'2026-11-20'});}));
+ await assertSucceeds(store.set('members','a',{name:'A',active:false},false));
+});
+test('protege creación, cambio de fecha y anulación de pago cerrado',async()=>{
+ const db=dbFor();await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'billPayments/closed'),{billId:'luz',amount:100,paidAt:'2026-09-20',participantIds:['a','b'],updatedBy:'user'}));
+ const b=writeBatch(db);b.update(doc(db,'settings/config'),{revision:1,updatedBy:'user'});b.update(doc(db,'billPayments/closed'),{paidAt:'2026-10-19',updatedBy:'user'});await assertFails(b.commit());
+});
+test('migración antigua mueve pagos una sola vez y conserva montos',async()=>{
+ const {initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore');
+ const adminApp=initializeApp({projectId:'demo-casa-al-dia'},'migration-test'),db=getFirestore(adminApp);
+ try{
+  await db.doc('members/a').set({name:'A'});await db.doc('members/b').set({name:'B'});
+  const migrate=require('../scripts/migrate');await migrate(db,false);
+  if((await db.doc('bills/luz').get()).data().history.length!==1)throw Error('Dry-run escribió datos');
+  await migrate(db,true);await migrate(db,true);
+  const payments=await db.collection('billPayments').get();if(payments.size!==1||payments.docs[0].data().amount!==100)throw Error('Migración duplicó o cambió importe');
+  if((await db.doc('bills/luz').get()).data().history.length!==0)throw Error('Origen no vaciado');
+ }finally{await adminApp.delete();}
+});
+test('cierre en servidor lee más de 400 movimientos y congela total completo',async()=>{
+ const {initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore');const app=initializeApp({projectId:'demo-casa-al-dia'},'close-test'),db=getFirestore(app);
+ try{
+  await db.doc('members/a').set({name:'A'});await db.doc('members/b').set({name:'B'});
+  const batch=db.batch();for(let i=0;i<405;i++)batch.set(db.doc('movements/m'+i),{type:'compra',qty:1,total:1,date:'2026-10-19',memberId:'a',participantIds:['a','b']});await batch.commit();
+  const close=require('../api/close-cycle').closeCycle;const snapshot=await close(db,'admin','2026-10','2026-12-19');
+  if(snapshot.total!==405||snapshot.expenseCount!==405)throw Error('Cierre truncado');
+  const again=await close(db,'admin','2026-10','2026-12-19');if(again.total!==405)throw Error('Cierre no idempotente');
+ }finally{await app.delete();}
+});
+test('respaldo completo restaura en destino vacío y rechaza sobrescribir',async()=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');const {initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore');
+ const source=initializeApp({projectId:'demo-casa-al-dia'},'backup-source'),target=initializeApp({projectId:'demo-casa-restore'},'backup-target');const out=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'casa-backup-')),'data.json');
+ try{
+  const {backup}=require('../scripts/backup'),restore=require('../scripts/restore'),db=getFirestore(target);await backup(getFirestore(source),out);await restore(db,out,false);await restore(db,out,true);
+  const copied=await db.doc('bills/luz').get();if(copied.data().history[0].amount!==100)throw Error('Dato restaurado no coincide');
+  await require('node:assert/strict').rejects(restore(db,out,true),/vacío/);
+ }finally{fs.rmSync(path.dirname(out),{recursive:true,force:true});await source.delete();await target.delete();}
+});
+test('transferencia en servidor verifica saldo real y no acepta sobrepago ni reenvío duplicado',async()=>{
+ const {initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore'),assert=require('node:assert/strict');const app=initializeApp({projectId:'demo-casa-al-dia'},'settle-test'),db=getFirestore(app);
+ try{
+  await db.doc('members/a').set({name:'A'});await db.doc('members/b').set({name:'B'});
+  await db.doc('bills/luz').update({history:[{paidAt:'2026-09-20',amount:100,memberId:'a'}]});
+  const settle=require('../api/settle').settle;
+  await assert.rejects(settle(db,'user',{fromId:'b',toId:'a',amount:60,expectedRevision:0,operationId:'settlement-excess'}),/importe/);
+  const input={fromId:'b',toId:'a',amount:50,expectedRevision:0,operationId:'settlement-once'};
+  await settle(db,'user',input);await settle(db,'user',input);assert.equal((await db.collection('settlements').get()).size,1);
+ }finally{await app.delete();}
+});

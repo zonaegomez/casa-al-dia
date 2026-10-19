@@ -1,0 +1,13 @@
+const test=require('node:test'),assert=require('node:assert/strict');const C=require('../core');
+const members=[{id:'a',name:'A'},{id:'b',name:'B'},{id:'c',name:'C'}];
+test('fecha de México no cambia a mañana por UTC',()=>assert.equal(C.today(new Date('2026-10-19T20:30:00-06:00')),'2026-10-19'));
+test('rechaza números negativos, no finitos y fechas imposibles',()=>{for(const n of [-1,NaN,Infinity])assert.throws(()=>C.money(n));assert.throws(()=>C.date('2026-02-30'));});
+test('reparte todos los centavos sin tolerancias que oculten saldos',()=>{assert.deepEqual(C.allocate(100,['c','b','a']).map(x=>x.cents),[3334,3333,3333]);});
+test('nuevo integrante no modifica beneficiarios históricos',()=>{const row={amount:100,memberId:'a',participantIds:['a','b']};const result=C.balances([row],members,[]);assert.equal(result.balances.find(b=>b.member.id==='c').balance,0);assert.equal(result.transfers[0].amount,50);});
+test('desactivar pagador conserva sus derechos de cobro',()=>{const result=C.balances([{amount:100,memberId:'a',participantIds:['a','b']}],[{...members[0],active:false},members[1]],[]);assert.equal(result.transfers[0].toId,'a');});
+test('aportaciones 900/100 no significan reparto 900/100',()=>{const r=C.balances([{amount:1000,participantIds:['a','b'],payers:[{memberId:'a',amount:900},{memberId:'b',amount:100}]}],members,[]);assert.equal(r.transfers[0].amount,400);});
+test('gasto sin pagador se excluye de ambos lados, sin desequilibrar saldos',()=>{const r=C.balances([{amount:100,memberId:null,participantIds:['a','b']}],members,[]);assert.equal(r.unassigned,100);assert.equal(r.balances.reduce((s,b)=>s+b.balance,0),0);});
+test('transferencia compensa una sola vez y deja el libro balanceado',()=>{const r=C.balances([{amount:100,memberId:'a',participantIds:['a','b']}],members,[{fromId:'b',toId:'a',amount:50}]);assert.equal(r.transfers.length,0);});
+test('no permite consumir más existencia ni pierde decimales',()=>{assert.throws(()=>C.quantity(2,-3));assert.equal(C.quantity(0.1,0.2),0.3);});
+test('ciclo conserva inicio personalizado entre años',()=>{assert.equal(C.cycle('2026-01-02',15),'2025-12');assert.equal(C.cycle('2026-01-15',15),'2026-01');});
+test('codec de respaldo conserva timestamps y bytes, no los convierte en objetos comunes',()=>{const {Timestamp}=require('firebase-admin/firestore'),{encode,decode}=require('../scripts/codec');const original={time:new Timestamp(10,123),bytes:Buffer.from('casa'),nested:[{ok:true}]};const result=decode(JSON.parse(JSON.stringify(encode(original))));assert.equal(result.time.nanoseconds,123);assert.equal(result.time.seconds,10);assert.equal(result.bytes.toString(),'casa');assert.deepEqual(result.nested,original.nested);});
