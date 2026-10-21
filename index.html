@@ -678,6 +678,7 @@ let state = {
   gastosCycle: null,
   gastosGranularity: 'mensual', // mensual | quincenal
   cuentasTab: 'gastos', // gastos | saldos
+  saldoScope: 'todo', // todo | fijos | variables — Saldo entre integrantes calculado junto o por separado
   dbMode: 'connecting', // connecting | live | local
   db: null,
   charts: {}
@@ -1268,9 +1269,20 @@ function topMembersThisCycle(limit){
   state.members.forEach(m=>{ stats[m.id] = {member:m, gasto:0, compras:0, consumos:0}; });
   state.movements.forEach(mv=>{
     if(cycleKeyFor(mv.date) !== cycle) return;
-    const s = stats[mv.memberId]; if(!s) return;
-    if(mv.type==='compra'){ s.gasto += Number(mv.total)||0; s.compras++; }
-    else if(mv.type==='consumo'){ s.consumos++; }
+    if(mv.type==='compra'){
+      if(Array.isArray(mv.splits) && mv.splits.length){
+        mv.splits.forEach(sp=>{
+          const s = stats[sp.memberId]; if(!s) return;
+          s.gasto += Number(sp.amount)||0; s.compras++;
+        });
+      } else {
+        const s = stats[mv.memberId]; if(!s) return;
+        s.gasto += Number(mv.total)||0; s.compras++;
+      }
+    } else if(mv.type==='consumo'){
+      const s = stats[mv.memberId]; if(!s) return;
+      s.consumos++;
+    }
   });
   state.bills.forEach(b=>{
     (b.history||[]).forEach(h=>{
@@ -1311,7 +1323,15 @@ function renderTopMembers(){
 function allExpenseRows(){
   const rows = [];
   state.movements.filter(m=>m.type==='compra').forEach(m=>{
-    rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(m.total)||0, memberName:m.memberName, memberId:m.memberId, source:'movement', ref:m});
+    if(Array.isArray(m.splits) && m.splits.length){
+      // Compra/ticket/Gasto manual pagado entre varios: cada quien puso su parte
+      // directamente, así que no genera deuda interna que el Saldo deba resolver.
+      m.splits.forEach(s=>{
+        rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(s.amount)||0, memberName:s.memberName, memberId:s.memberId, source:'movement', ref:m, splitPayment:true});
+      });
+    } else {
+      rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(m.total)||0, memberName:m.memberName, memberId:m.memberId, source:'movement', ref:m, debtFronted: !!m.debtFronted});
+    }
   });
   state.bills.forEach(b=>{
     (b.history||[]).forEach(h=>{
@@ -1367,10 +1387,20 @@ function allPeriodKeys(granularity){
   return Array.from(keys).sort();
 }
 /* ---------------- balances / saldo entre integrantes ---------------- */
-function computeBalances(periodKey, granularity){
-  // Los pagos ya divididos directamente entre integrantes (splitPayment) se excluyen:
-  // cada quien puso su propia parte, no hay deuda interna que esta vista deba resolver.
-  const rows = allExpenseRows().filter(r=> periodKeyFor(r.date, granularity) === periodKey && !r.splitPayment);
+function computeBalances(periodKey, granularity, scope){
+  // Los pagos ya divididos directamente entre integrantes (splitPayment) y los gastos
+  // adelantados por una sola persona que ya generaron su propia Deuda interna
+  // (debtFronted) se excluyen: ese dinero ya tiene su propia forma de emparejarse,
+  // no hay nada que esta vista deba resolver otra vez.
+  // scope: undefined/'todo' = todo el gasto junto; 'fijos' = solo Servicios;
+  // 'variables' = Inventario + Gasto manual + tickets (todo lo que no es Servicio).
+  const rows = allExpenseRows().filter(r=>{
+    if(periodKeyFor(r.date, granularity) !== periodKey) return false;
+    if(r.splitPayment || r.debtFronted) return false;
+    if(scope==='fijos') return r.source==='bill';
+    if(scope==='variables') return r.source==='movement';
+    return true;
+  });
   const total = rows.reduce((s,r)=>s+r.amount,0);
   const activeMembers = state.members.length ? state.members : [];
   const n = activeMembers.length;
@@ -1387,7 +1417,7 @@ function computeBalances(periodKey, granularity){
   // Transferencias ya marcadas como pagadas en este periodo: ajustan el saldo de
   // cada integrante antes de sugerir nuevas transferencias, para no repetir lo que
   // ya se pagó.
-  const periodSettlements = (state.settlements||[]).filter(s=> s.periodKey===periodKey && s.granularity===granularity);
+  const periodSettlements = (state.settlements||[]).filter(s=> s.periodKey===periodKey && s.granularity===granularity && (s.scope||'todo')===(scope||'todo'));
   const balances = activeMembers.map(m=>{
     let balance = (paidByMember[m.id]||0) - fairShare; // positive = le deben, negative = debe
     periodSettlements.forEach(s=>{
@@ -1409,7 +1439,7 @@ function computeBalances(periodKey, granularity){
     if(c.amt<=0.5) ci++;
     if(d.amt<=0.5) di++;
   }
-  return {total, fairShare, balances, transfers, unassigned, settlements: periodSettlements};
+  return {total, fairShare, balances, transfers, unassigned, settlements: periodSettlements, scope: scope||'todo'};
 }
 
 /* ---------------- charts ---------------- */
@@ -1788,7 +1818,7 @@ function gastosRowHtml(r){
       <div class="list-icon" style="background:${hexSoft(cat.color||'#999')};color:${cat.color||'#666'};">${icon(cat.icon||'dots')}</div>
       <div class="list-main">
         <div class="list-title">${esc(r.name)}</div>
-        <div class="list-sub">${fmtDate(r.date)} · ${cat.label||r.category}${r.memberName?' · '+esc(r.memberName):''}</div>
+        <div class="list-sub">${fmtDate(r.date)} · ${cat.label||r.category}${r.memberName?' · '+esc(r.memberName):''}${r.splitPayment?' · parte de un pago dividido':''}${r.debtFronted?' · adelantado, se cobra por Deuda interna':''}</div>
       </div>
       <div class="list-end" style="display:flex; align-items:center; gap:10px;">
         <span style="font-weight:700;">${fmtMoney(r.amount)}</span>
@@ -1814,10 +1844,18 @@ function gastosBody(rows, total){
 
 /* ---------------- Saldo entre integrantes (cuerpo, vive dentro de "Cuentas") ---------------- */
 function saldosBody(activeCycle, gran){
-  const b = computeBalances(activeCycle, gran);
+  const scope = state.saldoScope==='fijos' || state.saldoScope==='variables' ? state.saldoScope : 'todo';
+  const b = computeBalances(activeCycle, gran, scope);
   const hasMembers = state.members.length>=2;
   if(!hasMembers) return `<div class="panel"><div class="panel-body">${emptyBlock('users','Agrega al menos dos miembros de la casa en Ajustes para poder calcular un saldo entre integrantes.')}</div></div>`;
+  const scopeLabel = {todo:'Todo junto', fijos:'Gastos fijos (Servicios)', variables:'Gastos variables (Inventario, tickets, Gasto manual)'};
   return `
+    <div class="tabs" style="margin-bottom:10px;">
+      <div class="tab ${scope==='todo'?'active':''}" onclick="App.setSaldoScope('todo')">Todo junto</div>
+      <div class="tab ${scope==='fijos'?'active':''}" onclick="App.setSaldoScope('fijos')">Fijos</div>
+      <div class="tab ${scope==='variables'?'active':''}" onclick="App.setSaldoScope('variables')">Variables</div>
+    </div>
+    <div class="page-sub" style="margin:-4px 0 10px;">${scopeLabel[scope]} · cada vista calcula su propia cuota justa y sus propias transferencias, de forma independiente.</div>
     <div class="panel">
       <div class="panel-body pad0">
         <div class="table-scroll"><table>
@@ -1843,7 +1881,7 @@ function saldosBody(activeCycle, gran){
           <div class="list-main"><div class="list-title">${esc(t.from)} le transfiere a ${esc(t.to)}</div></div>
           <div class="list-end" style="display:flex; align-items:center; gap:10px;">
             <span style="font-weight:700;">${fmtMoney(t.amount)}</span>
-            <button class="btn btn-sm" onclick="App.markTransferPaid('${activeCycle}','${gran}','${t.fromId}','${jsStr(t.from)}','${t.toId}','${jsStr(t.to)}',${Math.round(t.amount*100)/100})">Ya se pagó</button>
+            <button class="btn btn-sm" onclick="App.markTransferPaid('${activeCycle}','${gran}','${t.fromId}','${jsStr(t.from)}','${t.toId}','${jsStr(t.to)}',${Math.round(t.amount*100)/100},'${scope}')">Ya se pagó</button>
           </div>
         </div>`).join('') : emptyBlock('check','Todos están al parejo — nadie le debe a nadie en este periodo.')}
       </div>
@@ -2345,22 +2383,65 @@ function modalTicket(prefillItemIds, scannedLines){
       <div id="ticketRows">${rowsHtml}</div>
       <button class="btn btn-sm" style="margin-top:6px;" onclick="App.addTicketRow()">${icon('plus')} Agregar línea</button>
       <div style="display:flex; justify-content:flex-end; align-items:baseline; gap:8px; margin-top:14px; font-weight:700; font-size:16px;">Total del ticket <span id="tkTotal">${fmtMoney(0)}</span></div>
+      ${shareModeSectionHtml('tk', state.members.slice().sort((a,b)=>a.name.localeCompare(b.name)), currentMember())}
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveTicket()">Guardar ticket</button></div>
   `);
   App.updateTicketTotal();
 }
 
+/* ---------------- Cómo se paga un gasto: Normal / Dividido / Deuda interna ----------------
+   Sección reutilizable (Gasto manual y Ticket) para elegir si un gasto lo pagó una sola
+   persona (normal), lo pagaron varios directamente (dividido, no genera deuda) o lo
+   adelantó una sola persona y los demás se lo deben (deuda interna: se crea una Deuda
+   interna automática por cada integrante elegido, para cobrarse por su propio ritmo). */
+function shareModeSectionHtml(prefix, members, payer){
+  if(members.length<2) return '';
+  const others = members.filter(m=> !payer || m.id!==payer.id);
+  return `
+    <div class="field" style="margin-top:4px;">
+      <label>¿Cómo se paga este gasto?</label>
+      <select id="${prefix}Mode" onchange="App.toggleShareMode('${prefix}')">
+        <option value="normal">Normal — lo pagó una sola persona</option>
+        <option value="dividido">Se pagó entre varios (cada uno puso su parte)</option>
+        <option value="deuda">Alguien lo adelantó — que se lo regresen (Deuda interna)</option>
+      </select>
+    </div>
+    <div id="${prefix}DivididoRows" style="display:none; margin-top:4px;">
+      <div class="page-sub" style="margin:4px 0;">Cuánto puso cada uno:</div>
+      ${members.map(m=>`<div class="field"><label>${esc(m.name)}</label><input class="${prefix}-split-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="0" oninput="App.recalcShareLabel('${prefix}','dividido')"></div>`).join('')}
+      <div class="page-sub" id="${prefix}DivididoLabel">Total dividido: ${fmtMoney(0)}</div>
+    </div>
+    <div id="${prefix}DeudaRows" style="display:none; margin-top:4px;">
+      <div class="page-sub" style="margin:4px 0;">¿Quién se lo debe a quien pagó? Se crea una Deuda interna por cada uno.</div>
+      ${others.map(m=>`<div class="field"><label>${esc(m.name)}</label><input class="${prefix}-debt-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="0" oninput="App.recalcShareLabel('${prefix}','deuda')"></div>`).join('')}
+      <div class="page-sub" id="${prefix}DeudaLabel">Total por cobrar: ${fmtMoney(0)}</div>
+      <button type="button" class="btn btn-sm" style="margin-top:4px;" onclick="App.recalcShareEven('${prefix}')">Repartir en partes iguales</button>
+    </div>
+  `;
+}
+function shareTotalFor(prefix){
+  if(prefix==='tk'){
+    let total = 0;
+    document.querySelectorAll('.tkCost').forEach(inp=> total += Number(inp.value)||0);
+    return total;
+  }
+  const el = document.getElementById(prefix+'Amount');
+  return el ? Number(el.value)||0 : 0;
+}
+
 function modalManualExpense(){
+  const members = state.members.slice().sort((a,b)=>a.name.localeCompare(b.name));
   openModal(`
     <div class="modal-header"><h3>Gasto manual</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
-      <div class="field"><label>Concepto</label><input id="meName" placeholder="Ej. Ferretería, reparación…"></div>
+      <div class="field"><label>Concepto</label><input id="meName" placeholder="Ej. Ferretería, reparación, carne asada…"></div>
       <div class="field-row">
         <div class="field"><label>Categoría</label><select id="meCat">${Object.keys(CATS).map(c=>`<option value="${c}">${CATS[c].label}</option>`).join('')}</select></div>
-        <div class="field"><label>Monto (MXN)</label><input id="meAmount" type="number" step="any" min="0" value="0"></div>
+        <div class="field" id="meAmountWrap"><label>Monto (MXN)</label><input id="meAmount" type="number" step="any" min="0" value="0" oninput="App.recalcShareEven('me')"></div>
       </div>
       <div class="field"><label>Fecha</label><input id="meDate" type="date" value="${todayISO()}"></div>
+      ${shareModeSectionHtml('me', members, currentMember())}
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveManualExpense()">Guardar</button></div>
   `);
@@ -2703,21 +2784,50 @@ window.App = {
     const store = storeEl ? storeEl.value.trim() : '';
     const rowEls = Array.from(document.querySelectorAll('.ticket-row'));
     const mem = currentMember();
+    const modeEl = document.getElementById('tkMode');
+    const mode = modeEl ? modeEl.value : 'normal';
+
+    // Total real del ticket (suma de las líneas), para poder repartir el modo
+    // "dividido" proporcionalmente entre cada línea sin perder el detalle por artículo.
+    let grandTotal = 0;
+    rowEls.forEach(row=>{ grandTotal += Number(row.querySelector('.tkCost').value)||0; });
+
+    let divididoSplits = null, debtRows = null;
+    if(mode==='dividido'){
+      const inputs = Array.from(document.querySelectorAll('.tk-split-input'));
+      divididoSplits = inputs.map(i=>({memberId:i.dataset.member, memberName:i.dataset.name, amount:Number(i.value)||0})).filter(s=>s.amount>0);
+      if(!divididoSplits.length){ toast('Captura cuánto puso cada integrante'); return; }
+    } else if(mode==='deuda'){
+      if(!mem){ toast('Elige primero "quién eres" — es quien adelantó el dinero'); return; }
+      const inputs = Array.from(document.querySelectorAll('.tk-debt-input'));
+      debtRows = inputs.map(i=>({memberId:i.dataset.member, memberName:i.dataset.name, amount:Number(i.value)||0})).filter(s=>s.amount>0);
+    }
+
     let count = 0;
     for(const row of rowEls){
       const itemId = row.querySelector('.tkItem').value;
       const qty = Number(row.querySelector('.tkQty').value)||0;
       const cost = Number(row.querySelector('.tkCost').value)||0;
+      const lineSplits = (divididoSplits && grandTotal>0)
+        ? divididoSplits.map(s=>({memberId:s.memberId, memberName:s.memberName, amount: Math.round((s.amount*(cost/grandTotal))*100)/100})).filter(s=>s.amount>0)
+        : null;
+      const extra = {};
+      if(lineSplits && lineSplits.length) extra.splits = lineSplits;
+      if(mode==='deuda') extra.debtFronted = true;
+      const lineMemberName = lineSplits && lineSplits.length
+        ? 'Dividido: '+lineSplits.map(s=>`${s.memberName} ${fmtMoney(s.amount)}`).join(' · ')
+        : (mem?mem.name:'—');
+
       if(itemId==='__free__'){
         const nameEl = row.querySelector('.tkFreeName');
         const catEl = row.querySelector('.tkFreeCat');
         const name = nameEl ? nameEl.value.trim() : '';
         const cat = catEl ? catEl.value : 'otro';
         if(!name || (!qty && !cost)) continue;
-        await Data.add('movements', {
+        await Data.add('movements', Object.assign({
           itemId:null, itemName:name, category:cat, type:'compra', qty: qty||1, unitCost: qty?cost/qty:cost,
-          total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra', store
-        });
+          total: cost, date, memberId: lineSplits?null:(mem?mem.id:null), memberName: lineMemberName, note:'Ticket de compra', store
+        }, extra));
         count++;
         continue;
       }
@@ -2725,14 +2835,21 @@ window.App = {
       if(!item || (!qty && !cost)) continue;
       const newQty = Number(item.currentQty||0) + qty;
       await Data.set('items', item.id, {currentQty:newQty, updatedAt:date, shoppingFlag:false, shoppingFlagBy:null, shoppingFlagAt:null}, true);
-      await Data.add('movements', {
+      await Data.add('movements', Object.assign({
         itemId:item.id, itemName:item.name, category:item.category, type:'compra', qty, unitCost: qty?cost/qty:0,
-        total: cost, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'Ticket de compra', store
-      });
+        total: cost, date, memberId: lineSplits?null:(mem?mem.id:null), memberName: lineMemberName, note:'Ticket de compra', store
+      }, extra));
       count++;
     }
+
+    if(mode==='deuda' && debtRows && debtRows.length){
+      const concept = store ? `Ticket de ${store}` : 'Ticket de compra';
+      await App.createDebtsFromFronted(mem, debtRows, concept, date);
+    }
+
     closeModal();
-    if(count) toast(count+' línea(s) del ticket registradas'); else toast('No se registró ninguna línea');
+    const extraMsg = mode==='deuda' ? (debtRows&&debtRows.length?' · deuda(s) interna(s) creada(s)':'') : mode==='dividido' ? ' · repartido entre varios' : '';
+    if(count) toast(count+' línea(s) del ticket registradas'+extraMsg); else toast('No se registró ninguna línea');
     render();
   },
 
@@ -2827,14 +2944,89 @@ window.App = {
     `);
   },
 
+  toggleShareMode(prefix){
+    const modeEl = document.getElementById(prefix+'Mode');
+    const mode = modeEl ? modeEl.value : 'normal';
+    const dividido = document.getElementById(prefix+'DivididoRows');
+    const deuda = document.getElementById(prefix+'DeudaRows');
+    const amountWrap = document.getElementById(prefix+'AmountWrap'); // solo existe en Gasto manual ('me')
+    if(dividido) dividido.style.display = mode==='dividido' ? '' : 'none';
+    if(deuda) deuda.style.display = mode==='deuda' ? '' : 'none';
+    if(amountWrap) amountWrap.style.display = mode==='dividido' ? 'none' : '';
+    if(mode==='dividido' || mode==='deuda') App.recalcShareEven(prefix);
+  },
+  recalcShareEven(prefix){
+    const modeEl = document.getElementById(prefix+'Mode');
+    const mode = modeEl ? modeEl.value : 'normal';
+    const total = shareTotalFor(prefix);
+    const n = state.members.length || 1;
+    const share = Math.round((total/n)*100)/100;
+    if(mode==='dividido'){
+      document.querySelectorAll('.'+prefix+'-split-input').forEach(inp=> inp.value = share);
+    } else if(mode==='deuda'){
+      document.querySelectorAll('.'+prefix+'-debt-input').forEach(inp=> inp.value = share);
+    }
+    App.recalcShareLabel(prefix, mode);
+  },
+  recalcShareLabel(prefix, kind){
+    const sel = kind==='dividido' ? '.'+prefix+'-split-input' : '.'+prefix+'-debt-input';
+    const labelId = kind==='dividido' ? prefix+'DivididoLabel' : prefix+'DeudaLabel';
+    const text = kind==='dividido' ? 'Total dividido: ' : 'Total por cobrar: ';
+    const inputs = Array.from(document.querySelectorAll(sel));
+    const total = inputs.reduce((s,i)=> s+(Number(i.value)||0), 0);
+    const label = document.getElementById(labelId);
+    if(label) label.textContent = text + fmtMoney(total);
+  },
+  async createDebtsFromFronted(payer, debtRows, concept, date){
+    // debtRows: [{memberId, memberName, amount}] — crea una Deuda interna por cada uno.
+    for(const d of debtRows){
+      if(!d.amount || d.amount<=0) continue;
+      const debtor = state.members.find(m=>m.id===d.memberId);
+      if(!debtor || !payer) continue;
+      await Data.add('debts', {
+        name: `${concept} (parte de ${payer.name})`,
+        fromId: debtor.id, fromName: debtor.name,
+        toId: payer.id, toName: payer.name,
+        totalAmount: Math.round(Number(d.amount)*100)/100,
+        startDate: date,
+        payments: []
+      });
+    }
+  },
+
   openManualExpense(){ modalManualExpense(); },
   async saveManualExpense(){
     const name = document.getElementById('meName').value.trim();
-    const amount = Number(document.getElementById('meAmount').value)||0;
     const date = document.getElementById('meDate').value || todayISO();
     const category = document.getElementById('meCat').value;
     if(!name){ toast('Descríbelo brevemente'); return; }
     const mem = currentMember();
+    const modeEl = document.getElementById('meMode');
+    const mode = modeEl ? modeEl.value : 'normal';
+
+    if(mode==='dividido'){
+      const inputs = Array.from(document.querySelectorAll('.me-split-input'));
+      const splits = inputs.map(i=>({memberId:i.dataset.member, memberName:i.dataset.name, amount:Number(i.value)||0})).filter(s=>s.amount>0);
+      if(!splits.length){ toast('Captura cuánto puso cada integrante'); return; }
+      const amount = splits.reduce((s,x)=>s+x.amount,0);
+      await Data.add('movements', { itemId:null, itemName:name, category, type:'compra', qty:1, unitCost:amount, total:amount, date, memberId:null, memberName:'Dividido: '+splits.map(s=>`${s.memberName} ${fmtMoney(s.amount)}`).join(' · '), note:'', splits });
+      closeModal(); toast('Gasto dividido agregado'); render();
+      return;
+    }
+
+    const amount = Number(document.getElementById('meAmount').value)||0;
+    if(!amount){ toast('Pon el monto del gasto'); return; }
+
+    if(mode==='deuda'){
+      if(!mem){ toast('Elige primero "quién eres" — es quien adelantó el dinero'); return; }
+      const inputs = Array.from(document.querySelectorAll('.me-debt-input'));
+      const debtRows = inputs.map(i=>({memberId:i.dataset.member, memberName:i.dataset.name, amount:Number(i.value)||0})).filter(s=>s.amount>0);
+      await Data.add('movements', { itemId:null, itemName:name, category, type:'compra', qty:1, unitCost:amount, total:amount, date, memberId:mem.id, memberName:mem.name, note:'', debtFronted:true });
+      if(debtRows.length) await App.createDebtsFromFronted(mem, debtRows, name, date);
+      closeModal(); toast(debtRows.length ? 'Gasto agregado y deuda(s) interna(s) creada(s)' : 'Gasto agregado'); render();
+      return;
+    }
+
     await Data.add('movements', { itemId:null, itemName:name, category, type:'compra', qty:1, unitCost:amount, total:amount, date, memberId: mem?mem.id:null, memberName: mem?mem.name:'—', note:'' });
     closeModal(); toast('Gasto agregado'); render();
   },
@@ -3092,14 +3284,15 @@ window.App = {
     toast('Ciclo cerrado'); render();
   },
 
-  async markTransferPaid(periodKey, granularity, fromId, fromName, toId, toName, amount){
+  async markTransferPaid(periodKey, granularity, fromId, fromName, toId, toName, amount, scope){
     if(!confirm(`¿Confirmas que ${fromName} ya le transfirió ${fmtMoney(Number(amount)||0)} a ${toName}?`)) return;
     await Data.add('settlements', {
       periodKey, granularity, fromId, fromName, toId, toName,
-      amount: Number(amount)||0, date: todayISO()
+      amount: Number(amount)||0, date: todayISO(), scope: scope||'todo'
     });
     toast('Transferencia registrada'); render();
   },
+  setSaldoScope(v){ state.saldoScope = v; render(); },
   confirmUndoSettlement(id){
     if(confirm('¿Deshacer esta transferencia registrada? Volverá a aparecer como pendiente.')){
       Data.del('settlements', id); toast('Transferencia deshecha'); render();
