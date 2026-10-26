@@ -520,6 +520,14 @@ const CATS = {
   otro:     {label:'Otros gastos', color:'#6B7280', icon:'dots'}
 };
 const INVENTORY_CATS = ['despensa','limpieza','higiene','insumos'];
+// Clasificación general de un Ticket de compra completo (independiente de la categoría
+// de cada producto/línea): ¿es una compra de rutina o algo fuera de lo normal (un evento,
+// una parrillada, una reparación puntual...)? Ayuda a identificar de un vistazo los gastos
+// que no son el súper de siempre, sin tener que re-categorizar cada producto.
+const TICKET_KINDS = {
+  despensa: {label:'Despensa / compra regular', badge:null},
+  espontaneo: {label:'Gasto espontáneo (evento, parrillada, reparación…)', badge:'Espontáneo'}
+};
 // Tabs del Inventario unificado (antes: páginas separadas Despensa / Limpieza
 // e higiene / Insumos). "todos" muestra las 4 categorías juntas.
 const INVENTORY_TABS = [
@@ -679,6 +687,7 @@ let state = {
   gastosGranularity: 'mensual', // mensual | quincenal
   cuentasTab: 'gastos', // gastos | saldos
   saldoScope: 'todo', // todo | fijos | variables — Saldo entre integrantes calculado junto o por separado
+  expandedTicketGroups: {}, // groupId -> true; qué tickets con Concepto están desglosados en la lista de Gastos
   dbMode: 'connecting', // connecting | live | local
   db: null,
   charts: {}
@@ -1327,10 +1336,10 @@ function allExpenseRows(){
       // Compra/ticket/Gasto manual pagado entre varios: cada quien puso su parte
       // directamente, así que no genera deuda interna que el Saldo deba resolver.
       m.splits.forEach(s=>{
-        rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(s.amount)||0, memberName:s.memberName, memberId:s.memberId, source:'movement', ref:m, splitPayment:true});
+        rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(s.amount)||0, memberName:s.memberName, memberId:s.memberId, source:'movement', ref:m, splitPayment:true, ticketGroupId:m.ticketGroupId||null, ticketConcept:m.ticketConcept||null, ticketKind:m.ticketKind||null});
       });
     } else {
-      rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(m.total)||0, memberName:m.memberName, memberId:m.memberId, source:'movement', ref:m, debtFronted: !!m.debtFronted});
+      rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(m.total)||0, memberName:m.memberName, memberId:m.memberId, source:'movement', ref:m, debtFronted: !!m.debtFronted, ticketGroupId:m.ticketGroupId||null, ticketConcept:m.ticketConcept||null, ticketKind:m.ticketKind||null});
     }
   });
   state.bills.forEach(b=>{
@@ -1832,11 +1841,64 @@ function gastosRowHtml(r){
     ${content}
   </div>`;
 }
+/* Un Ticket de compra con Concepto (ej. "Carne asada del sábado") agrupa todas sus
+   líneas/productos en UNA sola fila en Gastos, con el total sumado — y la opción de
+   desglosarlo para ver cada producto, igual que antes de tener Concepto. Los gastos
+   sin Concepto de ticket (la mayoría) se muestran exactamente igual que siempre. */
+function groupGastoRows(rows){
+  const out = [];
+  const byGroup = {};
+  rows.forEach(r=>{
+    if(r.ticketGroupId){
+      let g = byGroup[r.ticketGroupId];
+      if(!g){
+        g = {type:'group', groupId:r.ticketGroupId, concept:r.ticketConcept||'Ticket de compra', kind:r.ticketKind||'despensa', date:r.date, amount:0, lines:[]};
+        byGroup[r.ticketGroupId] = g;
+        out.push(g);
+      }
+      g.amount += r.amount;
+      g.lines.push(r);
+      return;
+    }
+    out.push({type:'single', row:r});
+  });
+  return out;
+}
+function gastoGroupMemberNote(lines){
+  const names = Array.from(new Set(lines.map(l=>l.memberName).filter(Boolean)));
+  if(names.length===1) return ' · '+esc(names[0]);
+  if(lines.some(l=>l.splitPayment)) return ' · dividido entre varios';
+  return '';
+}
+function gastoGroupRowHtml(group){
+  const kindInfo = TICKET_KINDS[group.kind]||TICKET_KINDS.despensa;
+  const color = group.kind==='espontaneo' ? '#F59E0B' : CATS.despensa.color;
+  const expanded = !!state.expandedTicketGroups[group.groupId];
+  // Un producto "dividido" genera varias filas (una por integrante que puso su parte),
+  // todas apuntando al mismo movimiento (ref): contamos movimientos únicos, no filas,
+  // para no mostrar "6 producto(s)" cuando en realidad el ticket solo tenía 2.
+  const productCount = new Set(group.lines.map(l=>l.ref)).size;
+  return `<div class="gasto-group">
+    <div class="list-item" style="cursor:pointer;" onclick="App.toggleTicketGroup('${group.groupId}')">
+      <div class="list-icon" style="background:${hexSoft(color)};color:${color};">${icon('cart')}</div>
+      <div class="list-main">
+        <div class="list-title">${esc(group.concept)}</div>
+        <div class="list-sub">${fmtDate(group.date)} · ${productCount} producto(s)${kindInfo.badge?' · '+kindInfo.badge:''}${gastoGroupMemberNote(group.lines)}</div>
+      </div>
+      <div class="list-end" style="display:flex; align-items:center; gap:10px;">
+        <span style="font-weight:700;">${fmtMoney(group.amount)}</span>
+        <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); App.toggleTicketGroup('${group.groupId}')" title="${expanded?'Ocultar detalle':'Ver detalle'}">${icon('chevDown')} ${expanded?'Ocultar':'Detalle'}</button>
+      </div>
+    </div>
+    ${expanded ? `<div class="gasto-group-detail" style="margin:0 0 10px 20px; border-left:2px solid var(--border); padding-left:10px;">${group.lines.map(gastosRowHtml).join('')}</div>` : ''}
+  </div>`;
+}
 function gastosBody(rows, total){
+  const items = groupGastoRows(rows);
   return `
     <div class="panel">
       <div class="panel-body pad0">
-        ${rows.length ? `<div class="swipe-list">${rows.map(gastosRowHtml).join('')}</div>` : emptyBlock('cash', 'Sin gastos en este ciclo todavía.')}
+        ${items.length ? `<div class="swipe-list">${items.map(it=> it.type==='group' ? gastoGroupRowHtml(it) : gastosRowHtml(it.row)).join('')}</div>` : emptyBlock('cash', 'Sin gastos en este ciclo todavía.')}
       </div>
     </div>
   `;
@@ -2356,9 +2418,14 @@ function ticketRowHtml(items, itemId, freeName, cost){
     </div>
   </div>`;
 }
-function modalTicket(prefillItemIds, scannedLines){
+function modalTicket(prefillItemIds, scannedLines, scanMeta){
   ticketRowSeq = 0;
   const items = state.items.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  // Si el escaneo con foto detectó fecha y/o tienda, se prellenan (siguen siendo
+  // editables) — si no, se comporta exactamente igual que antes: fecha de hoy y
+  // tienda vacía.
+  const metaDate = (scanMeta && scanMeta.date) || todayISO();
+  const metaStore = (scanMeta && scanMeta.store) || '';
   let rowsHtml;
   if(scannedLines && scannedLines.length){
     rowsHtml = scannedLines.map(l=> ticketRowHtml(items, l.itemId || '__free__', l.itemId ? null : l.name, l.price)).join('');
@@ -2375,9 +2442,13 @@ function modalTicket(prefillItemIds, scannedLines){
     <div class="modal-header"><h3>Ticket de compra</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
       ${scannedLines && scannedLines.length ? `<div class="page-sub" style="margin:-4px 0 2px;">Esto es lo que detectamos en la foto — revisa cada línea antes de guardar, sobre todo los precios.</div>` : ''}
+      <div class="field"><label>Concepto del ticket (opcional)</label><input id="tkConcept" placeholder="Ej. Carne asada del sábado, Fiesta de cumpleaños… — déjalo vacío si es el súper de siempre"></div>
       <div class="field-row">
-        <div class="field"><label>Fecha del ticket</label><input id="tkDate" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Tienda (opcional)</label><input id="tkStore" list="storeSuggestions" placeholder="Ej. HEB"></div>
+        <div class="field"><label>Fecha del ticket</label><input id="tkDate" type="date" value="${metaDate}"></div>
+        <div class="field"><label>Tienda (opcional)</label><input id="tkStore" list="storeSuggestions" placeholder="Ej. HEB" value="${esc(metaStore)}"></div>
+      </div>
+      <div class="field"><label>Tipo de gasto</label>
+        <select id="tkKind">${Object.keys(TICKET_KINDS).map(k=>`<option value="${k}">${TICKET_KINDS[k].label}</option>`).join('')}</select>
       </div>
       <datalist id="storeSuggestions">${STORE_SUGGESTIONS.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
       <div id="ticketRows">${rowsHtml}</div>
@@ -2782,7 +2853,15 @@ window.App = {
     const date = document.getElementById('tkDate').value || todayISO();
     const storeEl = document.getElementById('tkStore');
     const store = storeEl ? storeEl.value.trim() : '';
+    const conceptEl = document.getElementById('tkConcept');
+    const concept = conceptEl ? conceptEl.value.trim() : '';
+    const kindEl = document.getElementById('tkKind');
+    const kind = (kindEl && TICKET_KINDS[kindEl.value]) ? kindEl.value : 'despensa';
     const rowEls = Array.from(document.querySelectorAll('.ticket-row'));
+    // Si le pones Concepto al ticket (ej. "Carne asada del sábado"), todas sus líneas
+    // comparten un mismo groupId para poder mostrarse agrupadas en una sola fila en
+    // Gastos (con opción de desglosar), en vez de una fila por cada producto.
+    const groupId = concept ? uid() : null;
     const mem = currentMember();
     const modeEl = document.getElementById('tkMode');
     const mode = modeEl ? modeEl.value : 'normal';
@@ -2811,7 +2890,8 @@ window.App = {
       const lineSplits = (divididoSplits && grandTotal>0)
         ? divididoSplits.map(s=>({memberId:s.memberId, memberName:s.memberName, amount: Math.round((s.amount*(cost/grandTotal))*100)/100})).filter(s=>s.amount>0)
         : null;
-      const extra = {};
+      const extra = {ticketKind: kind};
+      if(groupId){ extra.ticketGroupId = groupId; extra.ticketConcept = concept; }
       if(lineSplits && lineSplits.length) extra.splits = lineSplits;
       if(mode==='deuda') extra.debtFronted = true;
       const lineMemberName = lineSplits && lineSplits.length
@@ -2843,8 +2923,8 @@ window.App = {
     }
 
     if(mode==='deuda' && debtRows && debtRows.length){
-      const concept = store ? `Ticket de ${store}` : 'Ticket de compra';
-      await App.createDebtsFromFronted(mem, debtRows, concept, date);
+      const debtConcept = concept || (store ? `Ticket de ${store}` : 'Ticket de compra');
+      await App.createDebtsFromFronted(mem, debtRows, debtConcept, date);
     }
 
     closeModal();
@@ -2903,8 +2983,15 @@ window.App = {
         const match = findBestItemMatch(l.name, items);
         return { itemId: match?match.id:null, name: l.name, price: Number(l.price)||0 };
       });
-      modalTicket(null, scannedLines);
-      toast(scannedLines.length+' producto(s) detectados — revísalos antes de guardar');
+      // Si la IA también logró leer la fecha y la tienda del ticket, las prellenamos
+      // (siempre editables) para no tener que volver a escribirlas a mano.
+      const scanMeta = {
+        date: /^\d{4}-\d{2}-\d{2}$/.test(payload.date||'') ? payload.date : null,
+        store: payload.store ? String(payload.store).trim() : null
+      };
+      modalTicket(null, scannedLines, scanMeta);
+      const metaMsg = (scanMeta.date||scanMeta.store) ? ' · fecha y/o tienda detectadas' : '';
+      toast(scannedLines.length+' producto(s) detectados'+metaMsg+' — revísalos antes de guardar');
     }catch(e){
       closeModal();
       toast('No se pudo leer la foto del ticket');
@@ -3293,6 +3380,7 @@ window.App = {
     toast('Transferencia registrada'); render();
   },
   setSaldoScope(v){ state.saldoScope = v; render(); },
+  toggleTicketGroup(groupId){ state.expandedTicketGroups[groupId] = !state.expandedTicketGroups[groupId]; render(); },
   confirmUndoSettlement(id){
     if(confirm('¿Deshacer esta transferencia registrada? Volverá a aparecer como pendiente.')){
       Data.del('settlements', id); toast('Transferencia deshecha'); render();
