@@ -41,14 +41,16 @@ module.exports = async function handler(req, res) {
   }
 
   const prompt = `Analiza esta foto de un ticket de compra (supermercado o tienda, en México). Devuelve SOLO un JSON válido, sin texto adicional antes ni después, con esta forma exacta:
-{"lines":[{"name":"nombre del producto","price":00.00}],"total":00.00}
+{"lines":[{"name":"nombre del producto","price":00.00}],"total":00.00,"date":"YYYY-MM-DD","store":"nombre de la tienda"}
 
 Reglas:
 - "name": nombre corto y legible del producto (sin códigos de barra, SKU ni abreviaturas raras).
 - "price": el precio de esa línea en pesos mexicanos, como número (sin símbolo de moneda ni comas).
 - "total": el total pagado del ticket si es visible; si no, la suma de las líneas.
+- "date": la fecha impresa en el ticket, convertida siempre al formato YYYY-MM-DD (los tickets mexicanos suelen imprimir DD/MM/AAAA — conviértela). Si no hay fecha visible o no estás seguro, pon null. Nunca inventes una fecha.
+- "store": el nombre de la tienda o negocio (ej. "HEB", "Walmart", "Soriana", "Oxxo"), tal como aparece en el encabezado del ticket. Si no es legible o no aparece, pon null. Nunca inventes un nombre.
 - Ignora encabezados, descuentos globales, IVA desglosado, folios, RFC, formas de pago y cualquier línea que no sea un producto comprado.
-- Si la foto no es legible o no logras identificar productos con confianza, responde {"lines":[],"total":0}.`;
+- Si la foto no es legible o no logras identificar productos con confianza, responde {"lines":[],"total":0,"date":null,"store":null}.`;
 
   try {
     const headers = {
@@ -85,7 +87,7 @@ Reglas:
 
     const data = await anthropicRes.json();
     const textBlock = Array.isArray(data.content) ? data.content.find(c => c.type === 'text') : null;
-    let parsed = { lines: [], total: 0 };
+    let parsed = { lines: [], total: 0, date: null, store: null };
 
     if (textBlock && textBlock.text) {
       const match = textBlock.text.match(/\{[\s\S]*\}/);
@@ -93,11 +95,20 @@ Reglas:
         try {
           const candidate = JSON.parse(match[0]);
           if (candidate && Array.isArray(candidate.lines)) {
+            // Fecha: solo se acepta si viene en formato YYYY-MM-DD válido y no es futura
+            // (un ticket de compra nunca debería fecharse en el futuro); cualquier otra
+            // cosa se descarta para no prellenar con una fecha equivocada.
+            const dateMatch = typeof candidate.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(candidate.date) ? candidate.date : null;
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const validDate = dateMatch && dateMatch <= todayStr ? dateMatch : null;
+            const store = candidate.store && String(candidate.store).trim() ? String(candidate.store).trim().slice(0, 60) : null;
             parsed = {
               lines: candidate.lines
                 .filter(l => l && l.name)
                 .map(l => ({ name: String(l.name).slice(0, 120), price: Number(l.price) || 0 })),
-              total: Number(candidate.total) || 0
+              total: Number(candidate.total) || 0,
+              date: validDate,
+              store
             };
           }
         } catch (e) {
