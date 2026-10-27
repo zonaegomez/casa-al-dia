@@ -50,10 +50,10 @@
   return store.atomic(meta,async t=>{
    const lines=[];
    for(let i=0;i<input.lines.length;i++){
-    const l=input.lines[i];C.number(l.qty,'Cantidad',true);let item=null;
-    if(l.itemId){item=await t.get('items',l.itemId);if(!item||item.archived)throw Error('Artículo no disponible');const exact=item.trackingMode!=='simple';await t.put('items',l.itemId,{currentQty:exact?C.quantity(item.currentQty,l.qty):item.currentQty,stockStatus:'hay',stockActionId:null,shoppingFlag:false,shoppingFlagBy:null,shoppingFlagAt:null,updatedAt:input.date});}
+    const l=input.lines[i];C.number(l.qty,'Cantidad',true);const unitsPerPack=l.unitsPerPack??1;if(!Number.isSafeInteger(unitsPerPack)||unitsPerPack<1||unitsPerPack>100000)throw Error('Unidades por paquete debe ser un entero entre 1 y 100000');if(unitsPerPack!==1&&!l.itemId)throw Error('Vincula el producto al inventario para convertir paquetes');const stockQty=C.number(l.qty*unitsPerPack,'Unidades de inventario',true);let item=null;
+    if(l.itemId){item=await t.get('items',l.itemId);if(!item||item.archived)throw Error('Artículo no disponible');const exact=item.trackingMode!=='simple';await t.put('items',l.itemId,{currentQty:exact?C.quantity(item.currentQty,stockQty):item.currentQty,stockStatus:'hay',stockActionId:null,shoppingFlag:false,shoppingFlagBy:null,shoppingFlagAt:null,updatedAt:input.date});}
     const itemName=item?item.name:l.itemName;if(!itemName)throw Error('Completa el nombre del producto');
-    lines.push({...(allocation.lineShares[i]?{participantIds:allocation.lineShares[i].map(p=>p.memberId),beneficiaryShares:allocation.lineShares[i]}:{}),id:t.id+'-'+i,itemId:l.itemId||null,itemName,category:item?item.category:l.category,unit:item?.unit||'',inventoryTracked:!!item&&item.trackingMode!=='simple',qty:l.qty,total:l.total,type:'compra',store:input.store||'',note:input.note||'',date:input.date});
+    lines.push({...(allocation.lineShares[i]?{participantIds:allocation.lineShares[i].map(p=>p.memberId),beneficiaryShares:allocation.lineShares[i]}:{}),id:t.id+'-'+i,itemId:l.itemId||null,itemName,category:item?item.category:l.category,unit:item?.unit||'',inventoryTracked:!!item&&item.trackingMode!=='simple',qty:stockQty,purchasedQty:l.qty,unitsPerPack,total:l.total,type:'compra',store:input.store||'',note:input.note||'',date:input.date});
    }
    const header={id:t.id,date:input.date,store:input.store||'',concept:input.concept||'Compra',kind:input.kind||'despensa',mode:input.mode||'normal',participantIds:allocation.shares.map(p=>p.memberId),payers:allocation.payers,beneficiaryShares:allocation.shares,total:allocation.total};
    await write(t,header,lines);return t.id;

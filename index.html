@@ -543,7 +543,8 @@ const INVENTORY_TABS = [
   {id:'higiene', label:'Higiene'},
   {id:'insumos', label:'Insumos'}
 ];
-const UNITS = ['pza','kg','g','L','ml','paquete','rollo','bolsa','caja'];
+const UNITS = ['pza','kg','g','L','ml','paquete','rollo','bolsa','caja','botella','lata','envase'];
+function stockVerb(it){return it.stockAction==='sacar'||(!it.stockAction&&it.unit==='rollo')?'Saqué':'Usé';}
 // Ubicación física dentro de la casa (independiente de la categoría de gasto),
 // para poder organizar y guardar el inventario por cuarto/piso.
 const LOCATIONS = ['Cocina','Sala/Comedor','Cuarto de lavado','Patio','Baños','Estudio','Sala de entretenimiento','Terraza chica','Terraza grande'];
@@ -1552,7 +1553,7 @@ function inventoryTable(items){
         </div>
         <div class="list-end row-actions-wrap inventory-actions">
           <button class="btn btn-sm ${it.shoppingFlag?'':'btn-ghost'}" style="${it.shoppingFlag?'background:var(--warn-soft);color:var(--warn);border-color:transparent;':''}" onclick="App.toggleShoppingFlag('${it.id}')" title="${it.shoppingFlag?'En la lista del súper — quitar':'Se está acabando: agregar a la lista del súper'}">${icon('cart')}</button>
-          ${it.trackingMode==='simple'?stockButtons(it):`<button class="btn btn-sm" onclick="App.quickConsume('${it.id}')" ${Number(it.currentQty)<1?'disabled':''} title="Restar 1 ${esc(it.unit||'unidad')} de las existencias">Usé 1 ${esc(it.unit||'')}</button><button class="btn btn-sm btn-ghost" onclick="App.openMovement('consumo','${it.id}')">Más opciones</button>`}
+          ${it.trackingMode==='simple'?stockButtons(it):`<button class="btn btn-sm" onclick="App.quickConsume('${it.id}')" ${Number(it.currentQty)<1?'disabled':''} title="Restar 1 ${esc(it.unit||'unidad')} de las existencias">${stockVerb(it)} 1 ${esc(it.unit||'')}</button><button class="btn btn-sm btn-ghost" onclick="App.openMovement('consumo','${it.id}')">Más opciones</button>`}
           <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')" title="Registrar compra">${icon('plus')}</button>
           <button class="btn btn-sm btn-ghost" onclick="App.openPriceCompare('${it.id}')" title="Comparar precios entre tiendas">${icon('chart')}</button>
           <button class="btn btn-sm btn-ghost" onclick="App.openItemForm('${it.id}')" title="Editar">${icon('edit')}</button>
@@ -2085,8 +2086,9 @@ function modalItemForm(id, defaultCat){
       <div class="field"><label>Marca preferida (opcional)</label><input id="itBrand" value="${it?esc(it.brand||''):''}" placeholder="Ej. Nescafé Clásico"></div>
       <div class="field-row">
         <div class="field"><label>Categoría</label><select id="itCat">${INVENTORY_CATS.map(c=>`<option value="${c}" ${(it?it.category:defaultCat)===c?'selected':''}>${CATS[c].label}</option>`).join('')}</select></div>
-        <div class="field"><label>Unidad</label><select id="itUnit">${UNITS.map(u=>`<option ${it&&it.unit===u?'selected':''}>${u}</option>`).join('')}</select></div>
+        <div class="field"><label>Unidad que vas a contar</label><select id="itUnit">${UNITS.map(u=>`<option ${it&&it.unit===u?'selected':''}>${u}</option>`).join('')}</select></div>
       </div>
+      <div class="field"><label>Acción rápida</label><select id="itAction"><option value="auto" ${!it?.stockAction?'selected':''}>Automática (Saqué para rollos; Usé para otras unidades)</option><option value="sacar" ${it?.stockAction==='sacar'?'selected':''}>Saqué 1 unidad de la reserva</option><option value="usar" ${it?.stockAction==='usar'?'selected':''}>Usé 1 unidad</option></select><small>Cuenta lo disponible de reserva. No hace falta registrar cada uso del baño.</small></div>
       <div class="field-row" id="itQuantityWrap" ${simple?'hidden':''}>
         <div class="field"><label>Existencia actual</label><input id="itQty" type="number" step="any" min="0" value="${it?it.currentQty:0}"></div>
         <div class="field"><label>Mínimo deseado</label><input id="itMin" type="number" step="any" min="0" value="${it?it.minQty:0}"></div>
@@ -2155,11 +2157,12 @@ function modalMovement(type, itemId){
       <div class="field"><label>Artículo</label>
         <select id="mvItem" onchange="App.updateMovementBrandHint()">${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)} (${it.category})</option>`).join('')}</select>
       </div>
-      <div id="mvBrandHint" style="font-size:12.5px; font-weight:700; color:var(--accent-strong); margin:-6px 0 10px;">${initialItem&&initialItem.brand?'Marca correcta: '+esc(initialItem.brand):''}</div>
+      <div id="mvBrandHint" style="font-size:12.5px; font-weight:700; color:var(--accent-strong); margin:-6px 0 10px;">${initialItem?'Inventario en '+esc(initialItem.unit)+(initialItem.brand?' · '+esc(initialItem.brand):''):''}</div>
       <div class="field-row">
-        <div class="field"><label>Cantidad</label><input id="mvQty" type="number" step="any" min="0" value="1"></div>
+        <div class="field"><label>Cantidad comprada (paquetes o unidades sueltas)</label><input id="mvQty" type="number" step="any" min="0" value="1"></div>
         ${isCompra?`<div class="field"><label>Costo total (MXN)</label><input id="mvCost" type="number" step="any" min="0" value="0"></div>`:''}
       </div>
+      ${isCompra?`<div class="field"><label>Unidades por paquete</label><input id="mvPack" type="number" min="1" step="1" value="1"><small>Si compras paquetes, Cantidad es el número de paquetes. Ejemplo: 2 paquetes × 30 rollos = 60 rollos. Para unidades sueltas deja 1. El costo es el total pagado.</small></div>`:''}
       <div class="field"><label>Fecha</label><input id="mvDate" type="date" value="${todayISO()}"></div>
       ${isCompra?`<div class="field"><label>Tienda (opcional)</label><input id="mvStore" list="storeSuggestions" placeholder="Ej. HEB"></div>`:''}
       ${isCompra?beneficiaryFields('mv')+shareModeSectionHtml('mv',activeMembers(),currentMember()):''}
@@ -2183,7 +2186,8 @@ function ticketRowHtml(items, itemId, freeName, cost){
           ${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}
         </select>
       </div>
-      <div class="field" style="flex:1; min-width:90px; margin:0;"><label>Cantidad</label><input class="tkQty" type="number" step="any" min="0" value="1" oninput="App.updateTicketTotal()"></div>
+      <div class="field" style="flex:1; min-width:90px; margin:0;"><label>Cantidad comprada</label><input class="tkQty" type="number" step="any" min="0" value="1" oninput="App.updateTicketTotal()"></div>
+      <div class="field" style="flex:1; min-width:90px; margin:0;"><label>Unidades por paquete</label><input class="tkPack" type="number" min="1" step="1" value="1"><small>Sueltas: 1. Paquete de 30: 30. Cantidad × este número entra al inventario.</small></div>
       <div class="field" style="flex:1; min-width:90px; margin:0;"><label>Total del producto (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="${cost!=null?cost:0}" oninput="App.updateTicketTotal()"></div>
       <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
     </div>
@@ -2504,7 +2508,7 @@ window.App = {
   },
   openItemForm(id, cat){ modalItemForm(id, cat||INVENTORY_CATS[0]); },
   async saveItem(id){
-    const data={name:document.getElementById('itName').value.trim(),brand:document.getElementById('itBrand').value.trim(),category:document.getElementById('itCat').value,unit:document.getElementById('itUnit').value,currentQty:CasaCore.number(document.getElementById('itQty').value,'Existencia'),minQty:CasaCore.number(document.getElementById('itMin').value,'Mínimo'),trackingMode:document.getElementById('itTracking').value,stockStatus:document.getElementById('itStockStatus').value,location:document.getElementById('itLocation').value||'',group:document.getElementById('itGroup').value.trim(),updatedAt:todayISO()};
+    const data={name:document.getElementById('itName').value.trim(),brand:document.getElementById('itBrand').value.trim(),category:document.getElementById('itCat').value,unit:document.getElementById('itUnit').value,stockAction:document.getElementById('itAction').value==='auto'?null:document.getElementById('itAction').value,currentQty:CasaCore.number(document.getElementById('itQty').value,'Existencia'),minQty:CasaCore.number(document.getElementById('itMin').value,'Mínimo'),trackingMode:document.getElementById('itTracking').value,stockStatus:document.getElementById('itStockStatus').value,location:document.getElementById('itLocation').value||'',group:document.getElementById('itGroup').value.trim(),updatedAt:todayISO()};
     if(!data.name)throw Error('Ponle un nombre al artículo');
     if(data.trackingMode==='exact'&&document.getElementById('itQty').value==='')throw Error('Cuenta las existencias actuales antes de activar cantidades exactas');
     const original=state.editItemOriginal?{...state.editItemOriginal}:null,requestedQty=data.currentQty;
@@ -2551,7 +2555,8 @@ window.App = {
     const itemId = document.getElementById('mvItem').value;
     const it = state.items.find(i=>i.id===itemId);
     const hint = document.getElementById('mvBrandHint');
-    if(hint) hint.textContent = it && it.brand ? 'Marca correcta: '+it.brand : '';
+    if(hint) hint.textContent = it ? (it.brand?'Marca correcta: '+it.brand+'. ':'')+'El inventario se cuenta en '+it.unit+'.' : '';
+    const pack=document.getElementById('mvPack');if(pack)pack.value='1';
   },
   openTicket(fromShoppingList){
     const ids = fromShoppingList ? shoppingListItems().map(r=>r.item.id) : null;
@@ -2576,6 +2581,7 @@ window.App = {
     const sel = row.querySelector('.tkItem');
     const freeFields = row.querySelector('.tkFreeFields');
     if(freeFields) freeFields.style.display = sel.value==='__free__' ? 'flex' : 'none';
+    const pack=row.querySelector('.tkPack');if(pack)pack.value='1';
   },
   updateTicketTotal(){
     let total = 0;
@@ -2908,7 +2914,7 @@ function readFunding(prefix,total){
 /* Integrity commands: explicit units of work, immutable operation receipts. */
 Object.assign(App,{
  toggleItemTracking(){const simple=document.getElementById('itTracking').value==='simple';document.getElementById('itStatusWrap').hidden=!simple;document.getElementById('itQuantityWrap').hidden=simple;if(!simple&&state.editItemOriginal?.trackingMode==='simple')document.getElementById('itQty').value='';},
- async quickConsume(itemId){const mem=requireMember(),action=await InventoryService.consume({itemId,qty:1,date:todayISO(),memberId:mem.id},{kind:'quick-consumption',opId:uid()});state.inventoryUndo=action;state.inventoryUndoMessage='Usaste 1 '+action.unit+' de '+action.name+'. Quedan '+action.remaining+'.';},
+ async quickConsume(itemId){const mem=requireMember(),action=await InventoryService.consume({itemId,qty:1,date:todayISO(),memberId:mem.id},{kind:'quick-consumption',opId:uid()});state.inventoryUndo=action;state.inventoryUndoMessage=(stockVerb(state.items.find(i=>i.id===itemId))==='Saqué'?'Sacaste':'Usaste')+' 1 '+action.unit+' de '+action.name+'. Quedan '+action.remaining+'.';},
  async setStockStatus(itemId,status,closeAfter=false){requireMember();const action=await InventoryService.setStatus(itemId,status,{kind:'stock-status',opId:uid()});if(action){state.inventoryUndo=action;state.inventoryUndoMessage=action.name+': '+({hay:'Hay',poco:'Queda poco',comprar:'Se acabó'})[status]+(status==='hay'?'':'. Agregado a Por comprar');}if(closeAfter){closeModal();toast('Estado actualizado');}},
  async undoInventory(){const action=state.inventoryUndo;if(!action)return;await InventoryService.undo(action,{kind:'undo-inventory',opId:uid()});if(state.inventoryUndo===action)state.inventoryUndo=null;},
  setExpenseScope(scope){state.expenseScope=scope;render();},
@@ -3018,13 +3024,13 @@ Object.assign(App,{
   CasaCore.number(cost,'Monto');
   const date=CasaCore.date(document.getElementById('mvDate')?.value||todayISO()),mem=requireMember();
   const note=document.getElementById('mvNote')?.value.trim()||'',store=document.getElementById('mvStore')?.value.trim()||'';
-  if(type==='compra'){await Purchases.create({date,store,note,concept:'Compra de inventario',lines:[{itemId,qty,total:cost}],...readFunding('mv',cost)},operationMeta('inventory-purchase'));closeModal();toast('Compra guardada: gasto, reparto e inventario actualizados');return;}
+  if(type==='compra'){await Purchases.create({date,store,note,concept:'Compra de inventario',lines:[{itemId,qty,unitsPerPack:Number(document.getElementById('mvPack')?.value||1),total:cost}],...readFunding('mv',cost)},operationMeta('inventory-purchase'));closeModal();toast('Compra guardada: gasto, reparto e inventario actualizados');return;}
   const action=await InventoryService.consume({itemId,qty,date,note,memberId:mem.id},operationMeta('inventory-consumption'));
   state.inventoryUndo=action;state.inventoryUndoMessage='Usaste '+qty+' '+action.unit+' de '+action.name+'. Quedan '+action.remaining+'.';closeModal();toast('Existencias actualizadas');
  },
  async saveTicket(){
  const date=CasaCore.date(document.getElementById('tkDate').value||todayISO());
- const lines=[...document.querySelectorAll('.ticket-row')].map(row=>({...(row.querySelector('.tkCustom')?.checked?{participantIds:[...row.querySelectorAll('.tk-line-beneficiary:checked')].map(x=>x.value)}:{}),itemId:row.querySelector('.tkItem').value==='__free__'?null:row.querySelector('.tkItem').value,qty:CasaCore.number(row.querySelector('.tkQty').value,'Cantidad',true),total:CasaCore.money(row.querySelector('.tkCost').value),itemName:row.querySelector('.tkFreeName')?.value.trim()||'',category:row.querySelector('.tkFreeCat')?.value||'despensa'}));
+ const lines=[...document.querySelectorAll('.ticket-row')].map(row=>({...(row.querySelector('.tkCustom')?.checked?{participantIds:[...row.querySelectorAll('.tk-line-beneficiary:checked')].map(x=>x.value)}:{}),itemId:row.querySelector('.tkItem').value==='__free__'?null:row.querySelector('.tkItem').value,qty:CasaCore.number(row.querySelector('.tkQty').value,'Cantidad',true),unitsPerPack:Number(row.querySelector('.tkPack')?.value||1),total:CasaCore.money(row.querySelector('.tkCost').value),itemName:row.querySelector('.tkFreeName')?.value.trim()||'',category:row.querySelector('.tkFreeCat')?.value||'despensa'}));
  const total=lines.reduce((s,l)=>s+CasaCore.cents(l.total),0)/100,expected=document.getElementById('tkExpectedTotal');
  if(expected&&CasaCore.cents(expected.value)!==CasaCore.cents(total))throw Error('Las líneas no coinciden con el total pagado del ticket');
  await Purchases.create({date,store:document.getElementById('tkStore')?.value.trim()||'',concept:document.getElementById('tkConcept')?.value.trim()||'Ticket de compra',kind:document.getElementById('tkKind')?.value||'despensa',lines,...readFunding('tk',total)},operationMeta('purchase-ticket'));
