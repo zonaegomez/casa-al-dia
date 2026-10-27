@@ -84,3 +84,9 @@ Las tareas de configuración y migración de producción no se ejecutaron al pre
 ## Registros nuevos de main que requieren conciliación
 
 Los adelantos antiguos sin `purchaseId` se identifican como `legacy-unlinked-advance`. No se borran, editan ni asocian a deudas por coincidencia de nombre. Revisar las obligaciones y aprobar un mapeo explícito antes de corregirlos. Los pagos históricos sin fecha de vencimiento verificable quedan `scheduleUnverified`; siguen en el gasto, pero no se modifica automáticamente su calendario. El respaldo ahora incluye `purchases` para conservar todos los vínculos nuevos.
+
+
+
+## Préstamos privados
+
+Antes de habilitar esta función, seguir [PRIVACIDAD.md](PRIVACIDAD.md): cuentas individuales, vínculo inmutable `access/{uid}.memberId`, reglas del mismo commit y prueba con tres sesiones. El selector operativo no concede acceso privado. Las deudas anteriores conservan su visibilidad compartida.

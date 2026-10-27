@@ -1,0 +1,29 @@
+const test=require('node:test'),assert=require('node:assert/strict');const {transition,outstanding,operate}=require('../server/loans');const fakeDB=require('./fake-db');
+const seed=()=>({participantUids:['alice','bob'],lenderUid:'alice',borrowerUid:'bob',lenderId:'a',borrowerId:'b',amountCents:50000,status:'pending',createdBy:'alice',version:1,events:[{id:'create',action:'create'}],payments:[]});
+const act=(l,uid,action,extra={})=>transition(l,uid,{action,operationId:action+'-'+l.version,expectedVersion:l.version,...extra},'2026-10-27T12:00:00Z');
+test('el solicitante no confirma su propio préstamo y un tercero no accede',()=>{assert.throws(()=>act(seed(),'alice','accept'),/otra persona/);assert.throws(()=>act(seed(),'outsider','accept'),/no disponible/);});
+test('un abono no baja la deuda hasta que quien prestó confirma recepción',()=>{let l=act(seed(),'bob','accept');l=act(l,'bob','payment',{amount:200});assert.equal(outstanding(l),50000);assert.throws(()=>act(l,'bob','confirm-payment',{paymentId:l.payments[0].id}),/quien prestó/);l=act(l,'alice','confirm-payment',{paymentId:l.payments[0].id});assert.equal(outstanding(l),30000);assert.equal(l.status,'active');});
+test('rechazar abono conserva el pendiente y permite recapturarlo',()=>{let l=act(seed(),'bob','accept');l=act(l,'bob','payment',{amount:200});l=act(l,'alice','reject-payment',{paymentId:l.payments[0].id});assert.equal(outstanding(l),50000);l=act(l,'bob','payment',{amount:500});l=act(l,'alice','confirm-payment',{paymentId:l.payments[1].id});assert.equal(l.status,'settled');assert.equal(outstanding(l),0);});
+test('rechaza sobrepago, montos inválidos, otro abono pendiente y versión obsoleta',()=>{const l=act(seed(),'bob','accept');for(const amount of [0,-1,'no',Infinity,501])assert.throws(()=>act(l,'bob','payment',{amount}));const p=act(l,'bob','payment',{amount:100});assert.throws(()=>act(p,'bob','payment',{amount:10}),/pendiente/);assert.throws(()=>act(l,'bob','payment',{amount:10,expectedVersion:1}),/cambió/);});
+test('reenvío de una operación confirmada no duplica abonos',()=>{const l=act(seed(),'bob','accept'),p=act(l,'bob','payment',{amount:100});const again=transition(p,'bob',{action:'payment',operationId:'payment-2',expectedVersion:2,amount:100},'later');assert.deepEqual(again,p);});
+test('rechazo y cancelación conservan historial y bloquean abonos',()=>{for(const [who,action]of [['bob','reject'],['alice','cancel']]){const l=act(seed(),who,action);assert.equal(l.events.length,2);assert.throws(()=>act(l,'bob','payment',{amount:10}));}});
+function database(extra={}){
+ const accounts=[{id:'alice',data:()=>({memberId:'a',enabled:true})},{id:'bob',data:()=>({memberId:'b',enabled:true})}];
+ const db=fakeDB({'access/alice':{memberId:'a',enabled:true},'members/a':{name:'A'},'members/b':{name:'B'},...extra}),base=db.runTransaction;
+ db.collection=()=>({where:(field,op,value)=>({query:true,value})});db.runTransaction=fn=>base(tx=>fn({...tx,get:r=>r.query?Promise.resolve({docs:typeof r.value==='string'?accounts.filter(d=>d.data().memberId===r.value):accounts}):tx.get(r)}));return db;
+}
+const create={action:'create',loanId:'loan-1',operationId:'create-1',otherMemberId:'b',direction:'lend',amount:500,title:'Préstamo'};
+test('API deriva identidades del acceso y no del integrante elegido en pantalla',async()=>{const db=database();await operate(db,'alice',{...create,lenderUid:'intruder',lenderId:'wrong'});const l=db.read('privateLoans/loan-1');assert.equal(l.lenderUid,'alice');assert.equal(l.lenderId,'a');assert.deepEqual(l.participantUids,['alice','bob']);assert.equal(db.read('operations/create-1'),undefined);assert.equal(db.read('settings/config'),undefined);});
+test('API admite solicitud de quien recibió dinero y requiere confirmación del prestamista',async()=>{const db=database();await operate(db,'alice',{...create,direction:'borrow'});const l=db.read('privateLoans/loan-1');assert.equal(l.borrowerUid,'alice');assert.throws(()=>act(l,'alice','accept'));assert.equal(act(l,'bob','accept').status,'active');});
+test('API falla sin vínculo o con vínculo desactivado',async()=>{for(const extra of [{'access/alice':{enabled:true}},{'members/a':{name:'A',active:false}}])await assert.rejects(operate(database(extra),'alice',create));});
+test('API es idempotente al crear y rechaza lectura/modificación de terceros',async()=>{const db=database({'access/third':{enabled:true,memberId:'c'},'members/c':{name:'C'}});await operate(db,'alice',create);await operate(db,'alice',create);assert.equal(db.read('privateLoans/loan-1').events.length,1);await assert.rejects(operate(db,'third',{...create,action:'accept',expectedVersion:1}),/no disponible/);});
+test('dos abonos concurrentes no se pisan ni sobregiran',async()=>{const db=database({'privateLoans/loan-1':{...seed(),status:'active',lenderUid:'bob',borrowerUid:'alice',lenderId:'b',borrowerId:'a'}});const results=await Promise.allSettled(['x','y'].map(operationId=>operate(db,'alice',{action:'payment',loanId:'loan-1',operationId,expectedVersion:1,amount:300})));assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(db.read('privateLoans/loan-1').payments.length,1);});
+
+test('vinculación verifica cuenta y miembro, conserva permisos y rechaza reasignar',async()=>{
+ const bind=require('../scripts/bind-account');const db=database();
+ const auth={getUser:async()=>({disabled:false,providerData:[{providerId:'password'}]})};
+ const before=db.read('access/alice');await bind(db,auth,'alice','a',false);assert.deepEqual(db.read('access/alice'),before);
+ await bind(db,auth,'alice','a',true);assert.equal(db.read('access/alice').memberId,'a');
+ await assert.rejects(bind(db,auth,'alice','b',true),/reasigna/);
+ await assert.rejects(bind(db,{getUser:async()=>({disabled:true,providerData:[]})},'alice','a',true),/habilitada/);
+});

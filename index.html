@@ -281,7 +281,7 @@
   .member-row-stats svg{width:13px; height:13px;}
   .member-row-amount{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14px; color:var(--accent-strong); flex:none;}
 
-  .tabs{display:flex; gap:4px; background:var(--surface-2); padding:4px; border-radius:var(--radius-sm); width:fit-content;}
+  .tabs{display:flex; flex-wrap:wrap; max-width:100%; gap:4px; background:var(--surface-2); padding:4px; border-radius:var(--radius-sm); width:fit-content;}
   .tab{padding:7px 14px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer; color:var(--ink-soft); transition:all .15s ease;}
   .tab.active{background:var(--surface); color:var(--accent-strong); box-shadow:var(--shadow-sm);}
 
@@ -709,6 +709,7 @@ function saveLocalSnapshot(){
 }
 
 /* ---------------- data access layer (works live or local) ---------------- */
+let accountMemberId=null, privateLoans=[], privateLoanMessage='', privateLoanUnsubscribe=null;
 let signedInUser=null, accessReady=false, syncReady=false, accessMessage='', unsubscribers=[];
 let rawBills=[], billPayments=[], loadingCollections=new Set();
 const Data = createCasaStore({state,core:CasaCore,db:()=>state.db,actor:()=>signedInUser&&signedInUser.uid,ready:()=>accessReady&&syncReady&&navigator.onLine,newId:uid});
@@ -730,7 +731,7 @@ function boot(){
  if(typeof firebase==='undefined'){accessMessage='No se pudo cargar Firebase. Revisa tu conexión y vuelve a cargar.';render();return;}
  firebase.initializeApp(firebaseConfig);
  firebase.auth().onAuthStateChanged(async user=>{
-   unsubscribers.forEach(f=>f());unsubscribers=[];accessReady=false;syncReady=false;signedInUser=user;
+   unsubscribers.forEach(f=>f());unsubscribers=[];if(privateLoanUnsubscribe)privateLoanUnsubscribe();privateLoanUnsubscribe=null;privateLoans=[];privateLoanMessage='';accountMemberId=null;accessReady=false;syncReady=false;signedInUser=user;
    for(const key of ['billReceipts','purchases','members','items','movements','bills','reminders','closedCycles','settlements','debts'])state[key]=[];
    state.settings={householdName:'Mi Casa',currency:'MXN',monthlyBudget:0,budgetByCategory:{},cycleStartDay:1};
    rawBills=[];billPayments=[];closeModal();render();
@@ -739,16 +740,17 @@ function boot(){
    state.db=firebase.firestore();
    try{
      const access=await state.db.doc('access/'+user.uid).get({source:'server'});
+     if(signedInUser?.uid!==user.uid)return;
      if(!access.exists||access.data().enabled!==true)throw Error('Tu cuenta no está autorizada. Comparte tu UID con quien administra la casa.');
-     accessReady=true;accessMessage='Sincronizando todos los módulos…';subscribeAll();
+     accountMemberId=access.data().memberId||null;accessReady=true;accessMessage='Sincronizando todos los módulos…';subscribeAll();subscribePrivateLoans();
    }catch(e){accessMessage=e.message;render();}
  });
- window.addEventListener('offline',()=>{syncReady=false;accessMessage='Sin conexión. Recarga cuando vuelva internet; no se guardarán cambios locales aislados.';closeModal();render();});
+ window.addEventListener('offline',()=>{privateLoans=[];privateLoanMessage='Sin conexión: los préstamos privados no están disponibles.';syncReady=false;accessMessage='Sin conexión. Recarga cuando vuelva internet; no se guardarán cambios locales aislados.';closeModal();render();});
  window.addEventListener('online',()=>{accessMessage='Conexión restablecida. Recarga para verificar la sincronización.';render();});
 }
 function mergeBills(){state.bills=rawBills.map(b=>Object.assign({},b,{history:(b.history||[]).map((h,i)=>Object.assign({},h,{_legacyIndex:i})).concat(billPayments.filter(p=>p.billId===b.id&&!p.voided).map(p=>Object.assign({},p,{_paymentId:p.id}))) }));}
 function subscribeAll(){
- const collections=['billReceipts','purchases','members','items','movements','bills','billPayments','billReceipts','reminders','closedCycles','settlements','debts','settings'];
+ const collections=['billReceipts','purchases','members','items','movements','bills','billPayments','reminders','closedCycles','settlements','debts','settings'];
  loadingCollections=new Set(collections);
  collections.forEach(coll=>{
   const ref=coll==='settings'?state.db.doc('settings/config'):state.db.collection(coll);
@@ -763,6 +765,15 @@ function subscribeAll(){
   },error=>{syncReady=false;accessMessage='No se pudo sincronizar '+coll+': '+error.message;closeModal();render();});
   unsubscribers.push(stop);
  });
+}
+function subscribePrivateLoans(){
+ if(!accountMemberId){privateLoanMessage='Tu cuenta aún no está vinculada a un integrante. El administrador debe completar la vinculación antes de usar préstamos privados.';return;}
+ const sessionUid=signedInUser.uid;privateLoanMessage='Verificando préstamos privados…';
+ privateLoanUnsubscribe=state.db.collection('privateLoans').where('participantUids','array-contains',sessionUid).onSnapshot({includeMetadataChanges:true},snap=>{
+  if(signedInUser?.uid!==sessionUid)return;
+  privateLoans=snap.metadata.fromCache?[]:snap.docs.map(d=>({id:d.id,...d.data()}));
+  privateLoanMessage=snap.metadata.fromCache?'Esperando verificación del servidor…':'';render();
+ },()=>{if(signedInUser?.uid!==sessionUid)return;privateLoans=[];privateLoanMessage='Préstamos privados no disponibles. Verifica la vinculación de tu cuenta y las reglas de Firebase.';closeModal();render();});
 }
 function render(){
   if(!accessReady||!syncReady){renderAccess();return;}
@@ -1583,6 +1594,7 @@ function billCard(b){
     else status = `<span class="badge badge-good"><span class="dot dot-good"></span>Al día</span>`;
   }
   const receipt=(state.billReceipts||[]).find(r=>r.billId===b.id&&r.dueDate===b.nextDueDate),progress=receipt?CasaCore.receiptProgress(receipt,billPayments):null;
+  if(progress&&progress.pending>0&&progress.pending<receipt.amount)status=`<span class="badge badge-warn">Pago parcial · ${d<0?'vencido':d===0?'vence hoy':'aún no vence'}</span>`;
   const lastPaid = (b.history||[]).slice().sort((x,y)=>(y.paidAt||'').localeCompare(x.paidAt||''))[0];
   return `<div class="bill-card">
     <div class="bill-top">
@@ -1617,7 +1629,8 @@ function gastosRowHtml(r){
       <div class="list-icon" style="background:${hexSoft(cat.color||'#999')};color:${cat.color||'#666'};">${icon(cat.icon||'dots')}</div>
       <div class="list-main">
         <div class="list-title">${esc(r.name)}</div>
-        <div class="list-sub">${fmtDate(r.date)} · ${cat.label||r.category}${r.memberName?' · '+esc(r.memberName):''}</div>
+        <details><summary>¿A quién le corresponde?</summary>${CasaCore.balances([r],state.members,[]).balances.filter(p=>p.fairShare>0).map(p=>'<div>'+esc(p.member.name)+': '+fmtMoney(p.fairShare)+'</div>').join('')||'Revisa la asignación de este gasto.'}</details>
+        <div class="list-sub">${fmtDate(r.date)} · ${cat.label||r.category}${r.memberName?' · Pagó: '+esc(r.memberName):''}</div>
       </div>
       <div class="list-end" style="display:flex; align-items:center; gap:10px;">
         <span style="font-weight:700;">${fmtMoney(r.amount)}</span>
@@ -1659,7 +1672,7 @@ function saldosBody(activeCycle, gran){
               <td><div style="display:flex; align-items:center; gap:8px;"><span class="avatar" style="background:${row.member.color||'#3E6DF6'}; width:26px; height:26px; font-size:11px;">${initials(row.member.name)}</span>${esc(row.member.name)}</div></td>
               <td class="num">${fmtMoney(row.paid)}</td>
               <td class="num row-sub">${fmtMoney(row.fairShare)}</td>
-              <td class="num" style="font-weight:700; color:${good?'var(--good)':'var(--bad)'}">${row.balance>=0?'+':''}${fmtMoney(row.balance)}</td>
+              <td class="num" style="font-weight:700; color:${good?'var(--good)':'var(--bad)'}">${row.balance>0?'Tienes a favor ':row.balance<0?'Te toca pagar ':'Sin pendiente '}${fmtMoney(Math.abs(row.balance))}<br><button class="btn btn-sm btn-ghost" onclick="App.explainBalance('${row.member.id}')">Ver cómo se calculó</button></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>
@@ -1700,7 +1713,7 @@ function pageCuentas(){
   const gran = state.gastosGranularity || 'mensual';
   const keys = allPeriodKeys(gran).reverse();
   const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
-  const tab = state.cuentasTab==='saldos' ? 'saldos' : state.cuentasTab==='deudas' ? 'deudas' : 'gastos';
+  const tab = state.cuentasTab==='saldos' ? 'saldos' : state.cuentasTab==='deudas' ? 'deudas' : state.cuentasTab==='prestamos' ? 'prestamos' : 'gastos';
   const scope=state.expenseScope||'todo';
   const rows = allExpenseRows().filter(r=>periodKeyFor(r.date, gran)===activeCycle);
   const shownRows=rows.filter(r=>scope==='fijos'?r.source==='bill':scope==='variables'?r.source==='movement':true);
@@ -1709,11 +1722,12 @@ function pageCuentas(){
   // NO son un gasto de la casa: es dinero que ya se había gastado antes y solo se está
   // regresando entre ustedes, así que no tienen ciclo ni cuentan en "Gastos" ni en el saldo.
   const activeDebts = state.debts.filter(d=>!d.archived&&!isDebtSettled(d));
-  const titleByTab = {gastos:'Gastos', saldos:'Saldo entre integrantes', deudas:'Deudas internas'};
+  const titleByTab = {gastos:'Gastos', saldos:'Saldo entre integrantes', deudas:'Deudas de compras', prestamos:'Préstamos privados'};
   const subByTab = {
     gastos: rows.length+' movimiento(s) · total '+fmtMoney(total),
     saldos: 'Saldo acumulado de compras y servicios; los pagos al proveedor pendientes se consultan en Servicios',
-    deudas: activeDebts.length+' deuda(s) activa(s)'
+    prestamos:'Solo participan las dos cuentas involucradas. No se suma a los gastos de la casa.',
+    deudas: activeDebts.length+' deuda(s) activa(s) · registros compartidos, no privados'
   };
   return `
     <div class="topbar">
@@ -1732,16 +1746,18 @@ function pageCuentas(){
           ${keys.map(k=>`<option value="${k}" ${k===activeCycle?'selected':''}>${cap(periodLabel(k, gran))}</option>`).join('')}
         </select>` : ''}
         ${tab==='gastos' ? `<button class="btn btn-primary" onclick="App.openManualExpense()">${icon('plus')} Gasto manual</button>` : ''}
-        ${tab==='deudas' ? `<button class="btn btn-primary" onclick="App.openDebtForm(null)">${icon('plus')} Nueva deuda</button>` : ''}
+        ${tab==='prestamos' ? `<button class="btn btn-primary" onclick="App.openPrivateLoan()">Nuevo préstamo</button>` : ''}
+        
       </div>
     </div>
     <div class="tabs" style="margin-bottom:10px;">
       <div class="tab ${tab==='gastos'?'active':''}" onclick="App.setCuentasTab('gastos')">Gastos</div>
       <div class="tab ${tab==='saldos'?'active':''}" onclick="App.setCuentasTab('saldos')">Saldo entre integrantes</div>
-      <div class="tab ${tab==='deudas'?'active':''}" onclick="App.setCuentasTab('deudas')">Deudas internas</div>
+      <div class="tab ${tab==='deudas'?'active':''}" onclick="App.setCuentasTab('deudas')">Deudas de compras</div>
+      <div class="tab ${tab==='prestamos'?'active':''}" onclick="App.setCuentasTab('prestamos')">Préstamos privados</div>
     </div>
     ${tab==='gastos'?`<div class="tabs"><button class="btn" onclick="App.setExpenseScope('todo')">Todo</button><button class="btn" onclick="App.setExpenseScope('fijos')">Servicios</button><button class="btn" onclick="App.setExpenseScope('variables')">Compras y otros</button></div><p class="page-sub">Filtro de gastos: ${scope==='todo'?'todos':scope==='fijos'?'servicios':'compras y otros'}. No modifica el saldo acumulado.</p>`:''}
-    ${tab==='gastos' ? gastosBody(shownRows, total) : tab==='saldos' ? saldosBody(activeCycle, gran) : deudasBody()}
+    ${tab==='gastos' ? gastosBody(shownRows, total) : tab==='saldos' ? saldosBody(activeCycle, gran) : tab==='prestamos' ? privateLoansBody() : deudasBody()}
   `;
 }
 
@@ -1784,7 +1800,7 @@ function deudasBody(){
   const settled = all.filter(d=>isDebtSettled(d));
   return `
     <div class="panel">
-      <div class="panel-body pad0">
+      <p class="page-sub">Estas deudas anteriores y adelantos de compras son visibles para toda la casa. Para nuevos préstamos personales usa Préstamos privados.</p><div class="panel-body pad0">
         ${active.length ? `<div class="swipe-list">${active.map(debtRowHtml).join('')}</div>` : emptyBlock('wallet', 'No hay deudas internas activas. Agrega la primera con "Nueva deuda".')}
       </div>
     </div>
@@ -2141,21 +2157,21 @@ function ticketRowHtml(items, itemId, freeName, cost){
   const isFree = !itemId || itemId==='__free__';
   const freeCats = INVENTORY_CATS.concat(['servicio','otro']);
   return `<div class="ticket-row" id="${rowId}" style="display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
-    <div style="display:flex; align-items:flex-end; gap:8px;">
-      <div class="field" style="flex:2; margin:0;"><label>Artículo</label>
+    <div style="display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px;">
+      <div class="field" style="flex:2; min-width:140px; margin:0;"><label>Artículo</label>
         <select class="tkItem" onchange="App.onTicketItemChange('${rowId}')">
           <option value="__free__" ${isFree?'selected':''}>— Otro / no vincular a inventario —</option>
           ${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}
         </select>
       </div>
-      <div class="field" style="flex:1; margin:0;"><label>Cantidad</label><input class="tkQty" type="number" step="any" min="0" value="1" oninput="App.updateTicketTotal()"></div>
-      <div class="field" style="flex:1; margin:0;"><label>Costo (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="${cost!=null?cost:0}" oninput="App.updateTicketTotal()"></div>
+      <div class="field" style="flex:1; min-width:90px; margin:0;"><label>Cantidad</label><input class="tkQty" type="number" step="any" min="0" value="1" oninput="App.updateTicketTotal()"></div>
+      <div class="field" style="flex:1; min-width:90px; margin:0;"><label>Total del producto (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="${cost!=null?cost:0}" oninput="App.updateTicketTotal()"></div>
       <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
     </div>
-    <details><summary>Reparto de este producto: usar el del ticket o personalizar</summary><label><input type="checkbox" class="tkCustom"> Elegir participantes para este producto</label><div>${activeMembers().map(m=>'<label style="display:block"><input type="checkbox" class="tk-line-beneficiary" value="'+m.id+'" checked> '+esc(m.name)+'</label>').join('')}</div></details>
+    <details><summary>Reparto: igual que el ticket (puedes cambiarlo aquí)</summary><label><input type="checkbox" class="tkCustom" onchange="this.closest('details').querySelector('.tkCustomPeople').hidden=!this.checked"> Cambiar reparto solo para este producto</label><div class="tkCustomPeople" hidden>${activeMembers().map(m=>'<label style="display:block"><input type="checkbox" class="tk-line-beneficiary" value="'+m.id+'" checked> '+esc(m.name)+'</label>').join('')}</div></details>
     <div class="tkFreeFields" style="display:${isFree?'flex':'none'}; gap:8px;">
-      <div class="field" style="flex:2; margin:0;"><label>Nombre (no vinculado a inventario)</label><input class="tkFreeName" value="${esc(freeName||'')}" placeholder="Ej. Jitomate a granel"></div>
-      <div class="field" style="flex:1; margin:0;"><label>Categoría</label><select class="tkFreeCat">${freeCats.map(c=>`<option value="${c}" ${c==='despensa'?'selected':''}>${CATS[c]?CATS[c].label:cap(c)}</option>`).join('')}</select></div>
+      <div class="field" style="flex:2; min-width:140px; margin:0;"><label>Nombre (no vinculado a inventario)</label><input class="tkFreeName" value="${esc(freeName||'')}" placeholder="Ej. Jitomate a granel"></div>
+      <div class="field" style="flex:1; min-width:90px; margin:0;"><label>Categoría</label><select class="tkFreeCat">${freeCats.map(c=>`<option value="${c}" ${c==='despensa'?'selected':''}>${CATS[c]?CATS[c].label:cap(c)}</option>`).join('')}</select></div>
     </div>
   </div>`;
 }
@@ -2295,7 +2311,7 @@ function modalPayBill(id){
         <span style="font-size:13px;">Se pagó entre varios integrantes (registrar aportaciones reales)</span>
       </label>` : ''}
       <div class="field"><label>Total real del recibo (MXN)</label><input id="payReceiptTotal" type="number" step="0.01" min="0.01" value="${receipt?receipt.amount:b.amountType==='variable'?'':b.amountEstimate||0}" ${receipt?'readonly':''}><small>${receipt?'Pendiente por cubrir: '+fmtMoney(progress.pending):'Confirma el importe completo. La aportación de abajo puede ser parcial.'}</small></div>
-      <div class="field" id="payAmountWrap"><label>Aportación de ${esc(currentMember()?.name||'quien registra')} (MXN)</label><input id="payAmount" type="number" step="0.01" min="0.01" value=""></div>
+      <div class="field" id="payAmountWrap"><label>¿Quién hizo esta aportación?</label><select id="payPayer"><option value="">Selecciona quién pagó</option>${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select><label>Importe de su aportación (MXN)</label><input id="payAmount" type="number" step="0.01" min="0.01" value=""></div>
       <div id="paySplitRows" style="display:none;">
         ${members.map(m=>`<div class="field"><label>${esc(m.name)}</label><input class="pay-split-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="0" oninput="App.recalcSplitTotal()"></div>`).join('')}
         <div class="page-sub" id="paySplitTotalLabel" style="margin-top:-4px;">Total dividido: ${fmtMoney(0)}</div>
@@ -2810,13 +2826,13 @@ function gastoGroupRowHtml(group){
         <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); App.toggleTicketGroup('${group.groupId}')" title="${expanded?'Ocultar detalle':'Ver detalle'}">${icon('chevDown')} ${expanded?'Ocultar':'Detalle'}</button>
       </div>
     </div>
-    ${expanded ? `<div class="gasto-group-detail" style="margin:0 0 10px 20px; border-left:2px solid var(--border); padding-left:10px;">${group.lines.map(gastosRowHtml).join('')}</div>` : ''}
+    ${expanded ? `<div class="gasto-group-detail" style="margin:0 0 10px 20px; border-left:2px solid var(--border); padding-left:10px;"><p class="page-sub">Desglose del ticket. Estos productos ya están incluidos en el total de arriba.</p>${group.lines.map(gastosRowHtml).join('')}</div>` : ''}
   </div>`;
 }
 
 function beneficiaryFields(prefix){return `<fieldset class="field"><legend>¿Para quiénes es este gasto?</legend>${activeMembers().map(m=>`<label style="display:block"><input type="checkbox" class="${prefix}-beneficiary" value="${m.id}" checked> ${esc(m.name)}</label>`).join('')}<small>Las aportaciones indican quién pagó. Estos integrantes determinan a quién le corresponde el gasto.</small></fieldset>`;}
 function shareModeSectionHtml(prefix, members, payer){
-  if(members.length<2) return '';
+  if(!members.length) return '';
   const others = members.filter(m=> !payer || m.id!==payer.id);
   return `
     <div class="field" style="margin-top:4px;">
@@ -2824,9 +2840,10 @@ function shareModeSectionHtml(prefix, members, payer){
       <select id="${prefix}Mode" onchange="App.toggleShareMode('${prefix}')">
         <option value="normal">Lo pagó una persona — calcular saldo compartido</option>
         <option value="dividido">Se pagó entre varios — se verificará el saldo pendiente</option>
-        <option value="deuda">Avanzado: cobrar como deuda separada del saldo compartido</option>
+
       </select>
     </div>
+    <div class="field" id="${prefix}PayerWrap"><label>¿Quién pagó el dinero?</label><select id="${prefix}Payer"><option value="">Selecciona quién pagó</option>${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select><small>Selecciona al pagador real. No depende de “Registrando como”.</small></div>
     <div id="${prefix}DivididoRows" style="display:none; margin-top:4px;">
       <div class="page-sub" style="margin:4px 0;">Cuánto puso cada uno:</div>
       ${members.map(m=>`<div class="field"><label>${esc(m.name)}</label><input class="${prefix}-split-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="0" oninput="App.recalcShareLabel('${prefix}','dividido')"></div>`).join('')}
@@ -2856,7 +2873,9 @@ function shareTotalFor(prefix){
 function readFunding(prefix,total){
  const beneficiaryInputs=[...document.querySelectorAll('.'+prefix+'-beneficiary')];
  const ids=beneficiaryInputs.length?beneficiaryInputs.filter(i=>i.checked).map(i=>i.value):participants();
- const mode=document.getElementById(prefix+'Mode')?.value||'normal',mem=requireMember();
+ const mode=document.getElementById(prefix+'Mode')?.value||'normal';
+ const payerId=document.getElementById(prefix+'Payer')?.value;const mem=payerId===undefined?requireMember():activeMembers().find(m=>m.id===payerId);
+ if(mode!=='dividido'&&!mem)throw Error('Selecciona quién pagó el dinero');
  const split=[...document.querySelectorAll('.'+prefix+'-split-input')].map(i=>({memberId:i.dataset.member,memberName:i.dataset.name,amount:CasaCore.money(i.value)})).filter(p=>p.amount>0);
  const debtorShares=[...document.querySelectorAll('.'+prefix+'-debt-input')].map(i=>({memberId:i.dataset.member,amount:CasaCore.money(i.value)})).filter(p=>p.amount>0);
  return {mode,participantIds:ids,payers:mode==='dividido'?split:[{memberId:mem.id,memberName:mem.name,amount:total}],debtorShares};
@@ -2896,6 +2915,7 @@ Object.assign(App,{
     const dividido = document.getElementById(prefix+'DivididoRows');
     const deuda = document.getElementById(prefix+'DeudaRows');
     const amountWrap = document.getElementById(prefix+'AmountWrap'); // solo existe en Gasto manual ('me')
+    const payerWrap=document.getElementById(prefix+'PayerWrap');if(payerWrap)payerWrap.hidden=mode==='dividido';
     if(dividido) dividido.style.display = mode==='dividido' ? '' : 'none';
     if(deuda) deuda.style.display = mode==='deuda' ? '' : 'none';
     if(amountWrap) amountWrap.style.display = '';
@@ -2966,7 +2986,7 @@ Object.assign(App,{
  },
  async saveBillPayment(id){
   const paidAt=document.getElementById('payDate').value||todayISO(),splitOn=document.getElementById('paySplitToggle')?.checked;
-  const mem=requireMember();
+  const mem=activeMembers().find(m=>m.id===document.getElementById('payPayer')?.value);if(!splitOn&&!mem)throw Error('Selecciona quién hizo la aportación');
   const splits=splitOn?[...document.querySelectorAll('.pay-split-input')].map(i=>({memberId:i.dataset.member,memberName:i.dataset.name,amount:CasaCore.money(i.value)})).filter(s=>s.amount>0):null;
   const amount=splitOn?CasaCore.money(splits.reduce((s,p)=>s+p.amount,0)):CasaCore.money(document.getElementById('payAmount').value);CasaCore.number(amount,'Pago',true);
   const dueDate=document.getElementById('payDueDate')?.value||state.bills.find(b=>b.id===id)?.nextDueDate;
@@ -2992,6 +3012,7 @@ Object.assign(App,{
  async saveDebt(id){
   const name=document.getElementById('dbName').value.trim(),fromId=document.getElementById('dbFrom').value,toId=document.getElementById('dbTo').value;
   const totalAmount=CasaCore.money(document.getElementById('dbTotal').value),startDate=document.getElementById('dbDate').value||todayISO();
+  if(!id)throw Error('Los nuevos préstamos personales se registran en Préstamos privados');
   if(!name||!fromId||!toId||fromId===toId)throw Error('Completa nombre, deudor y acreedor distintos');CasaCore.number(totalAmount,'Deuda',true);
   const data={name,fromId,toId,totalAmount,startDate,fromName:state.members.find(m=>m.id===fromId)?.name||'—',toName:state.members.find(m=>m.id===toId)?.name||'—'};
   const initial=CasaCore.money(document.getElementById('dbInitialPaid')?.value||0);
@@ -3019,6 +3040,54 @@ Object.assign(App,{
   const data=await res.json();if(!res.ok)throw Error(data.error||'No se pudo cerrar');toast('Ciclo conciliado y cerrado');
  }
 });
+function loanMoney(cents){return fmtMoney(cents/100);}
+function privateLoansBody(){
+ const me=signedInUser?.uid;
+ if(!accountMemberId)return '<div class="panel"><div class="panel-body">Tu cuenta aún no está vinculada a un integrante. El administrador debe vincularla antes de usar préstamos privados. Cambiar “Registrando como” no crea esa vinculación.</div></div>';
+ if(privateLoanMessage)return '<div class="panel"><div class="panel-body">'+esc(privateLoanMessage)+'</div></div>';
+ return '<p class="page-sub">Estos préstamos no cambian el saldo compartido ni el inventario. Se consultan con tu cuenta de acceso, aunque cambies “Registrando como”. Visibilidad restringida entre integrantes; la administración técnica de Firebase y sus respaldos conserva acceso.</p>'+ (privateLoans.length?privateLoans.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(l=>{
+  const lender=l.lenderUid===me,pending=l.payments.find(p=>p.status==='pending'),paid=l.payments.filter(p=>p.status==='confirmed').reduce((s,p)=>s+p.amountCents,0),left=l.amountCents-paid;
+  const action=(key,label,paymentId='')=>`<button class="btn btn-sm" onclick="App.privateLoanAction('${l.id}','${key}','${paymentId}')">${label}</button>`;
+  return `<div class="panel" style="margin-bottom:12px"><div class="panel-body"><h3>${esc(l.title)}</h3><p>${l.status==='pending'?'Solicitud por confirmar':l.status==='rejected'?'Solicitud rechazada':l.status==='cancelled'?'Solicitud cancelada':l.status==='settled'?'Préstamo liquidado':lender?esc(l.borrowerName)+' te debe':'Le debes a '+esc(l.lenderName)}: <strong>${loanMoney(['pending','rejected','cancelled'].includes(l.status)?l.amountCents:left)}</strong></p><p>${esc(l.lenderName)} → ${esc(l.borrowerName)}</p><p>Préstamo: ${loanMoney(l.amountCents)} · Devuelto y confirmado: ${loanMoney(paid)}</p><p>${({pending:'Pendiente de confirmación de la otra persona. Aún no es deuda confirmada.',active:'Préstamo confirmado',settled:'Liquidado',rejected:'Solicitud rechazada; no genera deuda',cancelled:'Solicitud cancelada; no genera deuda'})[l.status]||''}</p>
+  ${l.status==='pending'?(l.createdBy===me?action('cancel','Cancelar solicitud'):action('accept','Confirmo que el préstamo ocurrió')+' '+action('reject','No reconozco este préstamo')):''}
+  ${l.status==='active'&&!lender&&!pending?`<button class="btn btn-sm btn-primary" onclick="App.openPrivatePayment('${l.id}')">Reportar devolución</button>`:''}
+  ${pending?`<p>Abono de ${loanMoney(pending.amountCents)} por confirmar. El pendiente todavía no se reduce.</p>${lender?action('confirm-payment','Ya recibí este abono',pending.id)+' '+action('reject-payment','No lo recibí',pending.id):''}`:''}
+  <details><summary>Ver historial</summary><p>Solicitud: ${esc(l.createdAt.slice(0,10))}</p>${l.payments.map(p=>'<p>'+esc(p.reportedAt.slice(0,10))+' · '+loanMoney(p.amountCents)+' · '+({pending:'Por confirmar',confirmed:'Recibido',rejected:'No recibido'})[p.status]+'</p>').join('')}<p>${l.events.filter(e=>e.action!=='payment').map(e=>esc(e.at.slice(0,10))+' · '+esc(({create:'Solicitud registrada',accept:'Préstamo confirmado',reject:'Solicitud rechazada',cancel:'Solicitud cancelada','confirm-payment':'Abono confirmado','reject-payment':'Abono rechazado'})[e.action]||e.action)).join('<br>')}</p></details></div></div>`;
+ }).join(''):'<div class="panel"><div class="panel-body">No tienes préstamos privados registrados.</div></div>');
+}
+async function postPrivateLoan(input){
+ if(!signedInUser||!accountMemberId||!navigator.onLine||privateLoanMessage)throw Error('Verifica tu cuenta y conexión antes de registrar un préstamo');
+ const res=await fetch('/api/loans',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+await signedInUser.getIdToken()},body:JSON.stringify(input)});
+ const data=await res.json();if(!res.ok)throw Error(data.error||'No se pudo guardar el préstamo');return data;
+}
+Object.assign(App,{
+ openPrivateLoan(){
+  if(!accountMemberId||privateLoanMessage){toast(privateLoanMessage||'Vincula tu cuenta antes de usar préstamos privados');return;}
+  const me=state.members.find(m=>m.id===accountMemberId);if(!me)throw Error('Vinculación no disponible');
+  openModal(`<div class="modal-header"><h3>Nuevo préstamo privado</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body"><p>Tu cuenta corresponde a ${esc(me.name)}. La otra persona deberá confirmar que recibió o entregó el dinero.</p><div class="field"><label>¿Qué ocurrió?</label><select id="loanDirection"><option value="lend">Yo presté dinero</option><option value="borrow">Me prestaron dinero</option></select></div><div class="field"><label>¿Con quién?</label><select id="loanOther"><option value="">Selecciona otra persona</option>${activeMembers().filter(m=>m.id!==me.id).map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('')}</select></div><div class="field"><label>Concepto</label><input id="loanTitle" maxlength="160"></div><div class="field"><label>Importe entregado (MXN)</label><input id="loanAmount" type="number" min="0.01" step="0.01"></div><p>Registra dinero ya entregado. No es una solicitud de financiamiento ni un gasto compartido.</p></div><div class="modal-foot"><button class="btn btn-primary" onclick="App.savePrivateLoan()">Enviar a confirmación</button></div>`);
+ },
+ async savePrivateLoan(){
+  const operationId=state.formOperationId;
+  await postPrivateLoan({action:'create',loanId:operationId,operationId,otherMemberId:document.getElementById('loanOther').value,direction:document.getElementById('loanDirection').value,title:document.getElementById('loanTitle').value,amount:document.getElementById('loanAmount').value});closeModal();toast('Préstamo registrado; falta confirmación de la otra persona');
+ },
+ openPrivatePayment(id){
+  const loan=privateLoans.find(l=>l.id===id);if(!loan||loan.borrowerUid!==signedInUser?.uid)throw Error('Préstamo no disponible');
+  openModal(`<div class="modal-header"><h3>Reportar devolución</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body"><p>Reporta únicamente dinero que ya devolviste. ${esc(loan.lenderName)} debe confirmar que lo recibió.</p><div class="field"><label>Importe devuelto (MXN)</label><input id="loanPayment" type="number" min="0.01" step="0.01"></div></div><div class="modal-foot"><button class="btn btn-primary" onclick="App.savePrivatePayment('${id}',${loan.version})">Reportar abono</button></div>`);
+ },
+ async savePrivatePayment(id,expectedVersion){await postPrivateLoan({action:'payment',loanId:id,operationId:state.formOperationId,expectedVersion,amount:document.getElementById('loanPayment').value});closeModal();toast('Abono reportado. El saldo bajará cuando se confirme la recepción');},
+ async privateLoanAction(id,action,paymentId){
+  const l=privateLoans.find(l=>l.id===id);if(!l)throw Error('Préstamo no disponible');
+  if(!confirm('¿Confirmas esta acción? Quedará en el historial de las dos personas.'))return;
+  await postPrivateLoan({action,loanId:id,expectedVersion:l.version,operationId:uid(),paymentId});toast('Confirmación guardada');
+ },
+ explainBalance(memberId){
+  const row=computeBalances().balances.find(r=>r.member.id===memberId);if(!row)return;
+  const adjustment=CasaCore.money(row.balance-row.paid+row.fairShare);
+  const lines=allExpenseRows().filter(r=>!r.debtFronted).map(r=>{const part=CasaCore.balances([r],state.members,[]).balances.find(b=>b.member.id===memberId);return {r,part};}).filter(x=>x.part&&(x.part.paid||x.part.fairShare));
+  openModal(`<div class="modal-header"><h3>Cuenta de ${esc(row.member.name)}</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body"><p>Dinero que pagaste en compras y servicios: <strong>${fmtMoney(row.paid)}</strong></p><p>Tu parte de esos gastos: <strong>${fmtMoney(row.fairShare)}</strong></p><p>Ajuste por transferencias entre integrantes: <strong>${adjustment>=0?'+':''}${fmtMoney(adjustment)}</strong></p><p>Pagaste − te correspondía + ajuste = <strong>${row.balance<0?'Te toca pagar ':row.balance>0?'Tienes a favor ':'Sin pendiente '}${fmtMoney(Math.abs(row.balance))}</strong></p><p>Una transferencia que envías reduce lo que debes; una que recibes reduce lo que te debían. Los préstamos privados van por separado.</p><details><summary>Ver cada compra y servicio</summary>${lines.map(({r,part})=>'<p>'+esc(r.name)+' · '+fmtDate(r.date)+'<br>Pagaste '+fmtMoney(part.paid)+' · te corresponde '+fmtMoney(part.fairShare)+'</p>').join('')}</details></div>`);
+ }
+});
+
 // Each device serializes commands and keeps the form operation ID on retry.
 let commandPending=false;
 for(const [name,fn] of Object.entries(App)){
@@ -3034,3 +3103,4 @@ boot();
 </script>
 </body>
 </html>
+

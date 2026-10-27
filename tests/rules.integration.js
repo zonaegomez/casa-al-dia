@@ -114,3 +114,24 @@ test('consolidación de renta conserva pagos, corrige octubre y no duplica al re
   assert.equal((await db.doc('operations/consolidate-rent-oct2026').get()).data().originalBills.length,3);
  }finally{if(old===undefined)delete process.env.RENT_MIGRATION_BACKUP_CONFIRMED;else process.env.RENT_MIGRATION_BACKUP_CONFIRMED=old;await app.delete();}
 });
+
+
+async function loanFixture(){await env.withSecurityRulesDisabled(async ctx=>{const db=ctx.firestore();for(const [uid,memberId]of [['user','a'],['peer','b'],['admin','c']]){await setDoc(doc(db,'access/'+uid),{enabled:true,role:uid==='admin'?'admin':'member',memberId});await setDoc(doc(db,'members/'+memberId),{name:memberId});}await setDoc(doc(db,'privateLoans/private'),{participantUids:['user','peer'],lenderUid:'user',borrowerUid:'peer',lenderId:'a',borrowerId:'b',title:'Personal',amountCents:50000,status:'active',createdBy:'user',version:1,payments:[],events:[{id:'created',action:'create'}]});});}
+test('préstamo privado: solo participantes leen; tercero y admin de casa no pueden',async()=>{await loanFixture();for(const uid of ['user','peer'])await assertSucceeds(getDoc(doc(dbFor(uid),'privateLoans/private')));for(const uid of ['admin','stranger'])await assertFails(getDoc(doc(dbFor(uid),'privateLoans/private')));await assertFails(getDoc(doc(dbFor('user','anonymous'),'privateLoans/private')));});
+test('consulta privada requiere filtro del UID autenticado y no admite listar toda la colección',async()=>{await loanFixture();const {collection,query,where,getDocs}=require('firebase/firestore');await assertSucceeds(getDocs(query(collection(dbFor(),'privateLoans'),where('participantUids','array-contains','user'))));await assertFails(getDocs(collection(dbFor(),'privateLoans')));await assertFails(getDocs(query(collection(dbFor('admin'),'privateLoans'),where('participantUids','array-contains','user'))));});
+test('SDK no permite crear, alterar, borrar préstamos ni falsificar vinculación',async()=>{await loanFixture();const {deleteDoc}=require('firebase/firestore');for(const uid of ['user','peer','admin']){await assertFails(setDoc(doc(dbFor(uid),'privateLoans/forged'),{participantUids:[uid]}));await assertFails(setDoc(doc(dbFor(uid),'privateLoans/private'),{status:'settled'},{merge:true}));await assertFails(deleteDoc(doc(dbFor(uid),'privateLoans/private')));await assertFails(setDoc(doc(dbFor(uid),'access/'+uid),{memberId:'a'},{merge:true}));}});
+test('cuenta revocada pierde lectura de préstamo privado',async()=>{await loanFixture();await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'access/user'),{enabled:false,memberId:'a'}));await assertFails(getDoc(doc(dbFor(),'privateLoans/private')));});
+test('API de préstamos con Firestore real confirma, registra abono una vez y no altera libro compartido',async()=>{
+ await loanFixture();const {initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore'),assert=require('node:assert/strict'),{operate}=require('../server/loans');const app=initializeApp({projectId:'demo-casa-al-dia'},'loans-real'),db=getFirestore(app);
+ try{
+ const input={action:'create',loanId:'new-private',operationId:'new-private',otherMemberId:'b',direction:'lend',amount:500,title:'Personal'};
+ await operate(db,'user',input);await operate(db,'user',input);await assert.rejects(operate(db,'admin',{action:'accept',loanId:'new-private',operationId:'third',expectedVersion:1}),/no disponible/);
+ await operate(db,'peer',{action:'accept',loanId:'new-private',operationId:'accept',expectedVersion:1});
+ const abono={action:'payment',loanId:'new-private',operationId:'payment',expectedVersion:2,amount:200};await operate(db,'peer',abono);await operate(db,'peer',abono);
+ assert.equal((await db.doc('privateLoans/new-private').get()).data().payments.length,1);
+ await operate(db,'user',{action:'confirm-payment',loanId:'new-private',operationId:'confirm',paymentId:'payment',expectedVersion:3});
+ assert.equal(require('../server/loans').outstanding((await db.doc('privateLoans/new-private').get()).data()),30000);
+ assert.equal((await db.doc('settings/config').get()).data().revision,0);assert.equal((await db.collection('operations').get()).size,0);
+ const result=await require('firebase/firestore').getDocs(require('firebase/firestore').query(require('firebase/firestore').collection(dbFor('peer'),'privateLoans'),require('firebase/firestore').where('participantUids','array-contains','peer')));assert.equal(result.size,2);
+ }finally{await app.delete();}
+});

@@ -1,0 +1,2 @@
+const {authorize,body,fail}=require('../server/firebase');const {operate}=require('../server/loans');
+module.exports=async(req,res)=>{res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Método no permitido'});try{if(Number(req.headers['content-length']||0)>4096)return res.status(413).json({error:'Solicitud demasiado grande'});const {uid,db}=await authorize(req);return res.status(200).json(await operate(db,uid,body(req)));}catch(e){return fail(res,e);}};

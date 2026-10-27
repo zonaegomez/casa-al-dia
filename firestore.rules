@@ -84,6 +84,12 @@ service cloud.firestore {
    allow update: if actor() && revision() && resource.data.keys().hasAny(['allocationDate']) && open(resource.data.allocationDate) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voided','updatedBy']);
    allow delete: if false;
   }
+  match /privateLoans/{id} {
+   allow read: if member() && request.auth.uid in resource.data.participantUids
+    && get(/databases/$(database)/documents/access/$(request.auth.uid)).data.get('memberId','') is string
+    && get(/databases/$(database)/documents/access/$(request.auth.uid)).data.get('memberId','') != '';
+   allow write: if false; // Server validates identities, confirmations and transaction versions.
+  }
   match /debts/{id} {
    allow read: if member();
    allow create,update: if actor() && revision() && request.resource.data.fromId!=request.resource.data.toId && nonnegative(request.resource.data.totalAmount) && request.resource.data.totalAmount>0 && request.resource.data.payments is list && request.resource.data.payments.size()<=1000;
@@ -95,3 +101,4 @@ service cloud.firestore {
   match /{document=**} {allow read,write: if false;}
  }
 }
+
