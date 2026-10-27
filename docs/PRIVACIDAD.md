@@ -37,3 +37,12 @@ La privacidad aquí se refiere al nuevo módulo. No convierte en privados ticket
 ## Identidad en la interfaz
 
 Se retiró el selector operativo global. La barra lateral y la cabecera móvil muestran la cuenta vinculada; Mi cuenta ofrece Cambiar de cuenta (cierre de sesión). El inicio y los movimientos personales usan el integrante del acceso autenticado, ignorando cualquier selección antigua guardada en el dispositivo. Crear un integrante no vincula automáticamente la cuenta. Los campos de pagador siguen disponibles y son independientes de la identidad.
+
+
+## Cambio de contraseña
+
+Mi cuenta → Cambiar contraseña pide la contraseña actual, la nueva y su confirmación. El cliente valida coincidencia y mínimo de 8 caracteres, reautentica a la cuenta actual con `EmailAuthProvider.credential` y solo entonces llama a `user.updatePassword`. Firebase aplica además la política del proyecto. Se verifica que la sesión siga siendo la misma antes de actualizar. Los campos se limpian al finalizar el intento; no se escriben contraseñas en Firestore, operaciones, respaldos ni logs de la app. El UID y su vínculo `access.memberId` permanecen iguales.
+
+Errores de contraseña actual, política, conexión y sesión se muestran en el formulario, sin propagar mensajes originales del proveedor al logger. La recuperación por correo queda fuera de este cambio. La validación automatizada usa una cuenta sintética en Authentication Emulator, sin modificar credenciales reales.
+
+Referencia oficial: https://firebase.google.com/docs/auth/web/manage-users#set_a_users_password y sección Re-authenticate a user.

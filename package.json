@@ -7,7 +7,8 @@
     "check": "node scripts/check.js",
     "test:rules": "firebase emulators:exec --project demo-casa-al-dia --only firestore 'node --test tests/rules.integration.js'",
     "build": "node scripts/build.js",
-    "test:browser": "npm run build && node scripts/browser-smoke.js"
+    "test:browser": "npm run build && node scripts/browser-smoke.js",
+    "test:auth": "firebase emulators:exec --project demo-casa-al-dia --only auth 'node --test tests/auth.integration.js'"
   },
   "dependencies": {
     "chart.js": "^4.5.1",

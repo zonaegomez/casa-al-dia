@@ -2029,7 +2029,19 @@ function modalAccount(){
  <div class="modal-body"><div class="field"><label>Cuenta activa</label><strong>${m?esc(m.name):'Vinculación pendiente'}</strong></div><p>${esc(signedInUser?.email||'')}</p>
  <p>${m?'Este es el integrante vinculado a tu acceso. En compras y servicios puedes indicar quién pagó, aunque sea otra persona.':'El administrador debe vincular tu cuenta con un integrante antes de registrar movimientos personales.'}</p>
  <p>Para entrar con otro integrante, cambia de cuenta e inicia sesión con su correo y contraseña.</p></div>
- <div class="modal-foot"><button class="btn btn-primary" onclick="App.signOut()">Cambiar de cuenta</button></div>`);
+ <div class="modal-foot"><button class="btn" onclick="App.openChangePassword()">Cambiar contraseña</button><button class="btn btn-primary" onclick="App.signOut()">Cambiar de cuenta</button></div>`);
+}
+
+function modalChangePassword(){
+ if(!signedInUser?.email){toast('Inicia sesión con tu cuenta de correo para cambiar la contraseña');return;}
+ openModal(`<form id="changePasswordForm" onsubmit="event.preventDefault();App.changePassword()">
+ <div class="modal-header"><h3>Cambiar contraseña</h3><button type="button" class="btn btn-ghost btn-icon" onclick="App.closeModal()" aria-label="Cerrar">${icon('x')}</button></div>
+ <div class="modal-body"><p>Cuenta: ${esc(signedInUser.email)}</p><input type="text" name="username" autocomplete="username" value="${esc(signedInUser.email)}" readonly hidden>
+ <div class="field"><label for="passwordCurrent">Contraseña actual</label><input id="passwordCurrent" name="current-password" type="password" autocomplete="current-password" required></div>
+ <div class="field"><label for="passwordNew">Nueva contraseña</label><input id="passwordNew" name="new-password" type="password" autocomplete="new-password" minlength="8" required><small>Usa al menos 8 caracteres. Si tu cuenta exige requisitos adicionales, también deberán cumplirse.</small></div>
+ <div class="field"><label for="passwordConfirm">Confirma la nueva contraseña</label><input id="passwordConfirm" name="confirm-password" type="password" autocomplete="new-password" minlength="8" required></div>
+ <p id="passwordError" role="alert" aria-live="polite" style="color:var(--bad)"></p><p>El cambio conserva tus registros y permisos.</p></div>
+ <div class="modal-foot"><button type="button" class="btn" onclick="App.openAccount()">Volver</button><button id="passwordSave" type="submit" class="btn btn-primary">Guardar contraseña</button></div></form>`);
 }
 
 function modalMemberForm(id){
@@ -2915,6 +2927,52 @@ Object.assign(App,{
  async login(){
   const email=document.getElementById('loginEmail').value.trim(),password=document.getElementById('loginPassword').value;
   try{accessMessage='Iniciando sesión…';await firebase.auth().signInWithEmailAndPassword(email,password);}catch(e){accessMessage='No se pudo ingresar. Revisa tus credenciales y que el acceso por correo esté habilitado.';render();}
+ },
+ openChangePassword(){modalChangePassword();},
+ async changePassword(){
+  const form=document.getElementById('changePasswordForm'),current=document.getElementById('passwordCurrent'),next=document.getElementById('passwordNew'),confirmation=document.getElementById('passwordConfirm'),error=document.getElementById('passwordError'),button=document.getElementById('passwordSave');
+  if(!form||!current||!next||!confirmation)return;
+  if(error)error.textContent='';
+  const message=text=>{if(error)error.textContent=text;};
+  const user=signedInUser;
+  if(!user?.email||firebase.auth().currentUser?.uid!==user.uid){message('Tu sesión cambió. Vuelve a iniciar sesión.');return;}
+  if(!navigator.onLine){message('Necesitas conexión para cambiar tu contraseña.');return;}
+  if(!current.value){message('Escribe tu contraseña actual.');current.focus?.();return;}
+  if(next.value.length<8){message('La nueva contraseña debe tener al menos 8 caracteres.');return;}
+  if(next.value!==confirmation.value){message('Las contraseñas nuevas no coinciden.');return;}
+  if(next.value===current.value){message('Elige una contraseña distinta de la actual.');return;}
+  const previousPassword=current.value,newPassword=next.value;
+  current.disabled=true;next.disabled=true;confirmation.disabled=true;
+  if(button){button.disabled=true;button.textContent='Guardando…';}
+  try{
+   const credential=firebase.auth.EmailAuthProvider.credential(user.email,previousPassword);
+   await user.reauthenticateWithCredential(credential);
+   if(signedInUser?.uid!==user.uid||firebase.auth().currentUser?.uid!==user.uid)throw {code:'auth/user-mismatch'};
+   await user.updatePassword(newPassword);
+   current.value='';next.value='';confirmation.value='';
+   if(document.getElementById('changePasswordForm')===form)closeModal();
+   toast('Contraseña actualizada. Usa la nueva contraseña cuando vuelvas a entrar.');
+  }catch(e){
+   // Never propagate provider errors or credentials to the shared command logger.
+   const messages={
+    'auth/wrong-password':'La contraseña actual no es correcta.',
+    'auth/invalid-credential':'No pudimos verificar tu contraseña actual. Revísala e intenta de nuevo.',
+    'auth/invalid-login-credentials':'No pudimos verificar tu contraseña actual. Revísala e intenta de nuevo.',
+    'auth/weak-password':'La nueva contraseña no cumple los requisitos de tu cuenta. Usa una más segura.',
+    'auth/password-does-not-meet-requirements':'La nueva contraseña no cumple los requisitos de tu cuenta. Usa una más segura.',
+    'auth/too-many-requests':'Hay demasiados intentos. Espera un momento antes de volver a intentar.',
+    'auth/network-request-failed':'Se perdió la conexión. Si ocurrió al guardar, prueba entrar con la nueva contraseña antes de repetir el cambio.',
+    'auth/requires-recent-login':'Vuelve a iniciar sesión y luego intenta cambiar la contraseña.',
+    'auth/user-mismatch':'Tu sesión cambió. Vuelve a iniciar sesión.',
+    'auth/user-disabled':'Tu cuenta está deshabilitada. Contacta al administrador.',
+    'auth/user-token-expired':'Tu sesión venció. Vuelve a iniciar sesión.'
+   };
+   message(messages[e?.code]||'No se pudo completar el cambio. Vuelve a iniciar sesión e intenta de nuevo.');
+  }finally{
+   current.value='';next.value='';confirmation.value='';
+   current.disabled=false;next.disabled=false;confirmation.disabled=false;
+   if(button){button.disabled=false;button.textContent='Guardar contraseña';}
+  }
  },
  async signOut(){await firebase.auth().signOut();},
  exportLocalBackup(){const backup=loadLocal();if(!backup){toast('No hay respaldo en este dispositivo');return;}downloadFile('respaldo-anterior-casa.json',JSON.stringify(backup,null,2));},

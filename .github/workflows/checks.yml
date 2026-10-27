@@ -17,5 +17,7 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run test:rules
+      - run: npm run test:auth
       - run: npx playwright install --with-deps chromium --only-shell
       - run: npm run test:browser
+
