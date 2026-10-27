@@ -15,14 +15,24 @@
    const owed=debts.reduce((s,d)=>s+C.cents(d.amount),0);if(owed>C.cents(total))throw Error('La deuda no puede exceder el gasto');if(!ids.includes(payer)&&owed!==C.cents(total))throw Error('Asigna todo el gasto a los beneficiarios cuando el pagador no participa');
    shares=ids.map(memberId=>({memberId,amount:memberId===payer?(C.cents(total)-owed)/100:(debts.find(d=>d.memberId===memberId)?.amount||0)}));
   }
-  return {total,payers,shares};
+  const lineShares=input.lines.map(l=>{
+   const selected=l.participantIds||ids;
+   if(!selected.length||new Set(selected).size!==selected.length||selected.some(id=>!people.some(m=>m.id===id&&m.active!==false)))throw Error('Selecciona participantes válidos en cada producto');
+   if(input.mode==='deuda'&&l.participantIds&&JSON.stringify([...selected].sort())!==JSON.stringify([...ids].sort()))throw Error('Para productos con distintos participantes usa el saldo compartido; no una deuda separada');
+   return input.mode==='deuda'?null:C.allocate(l.total,selected).map(p=>({memberId:p.memberId,amount:p.cents/100}));
+  });
+  if(input.mode!=='deuda'){
+   const totals=new Map();lineShares.flat().forEach(p=>totals.set(p.memberId,(totals.get(p.memberId)||0)+C.cents(p.amount)));
+   shares=[...totals].map(([memberId,n])=>({memberId,amount:n/100}));
+  }
+  return {total,payers,shares,lineShares};
  }
  async function write(t,header,lines,old=null){
   const amounts=lines.map(l=>l.total),paid=C.matrix(header.payers,amounts),owed=C.matrix(header.beneficiaryShares,amounts);
   for(let i=0;i<lines.length;i++){
    const l=lines[i];C.number(l.qty,'Cantidad',true);C.number(l.total,'Costo');C.date(l.date||header.date);
    if(l.itemId&&!l.itemName)throw Error('Falta el nombre del artículo');
-   await t.put('movements',l.id,{...l,date:header.date,total:C.money(l.total),unitCost:l.total/l.qty,purchaseId:header.id,ticketGroupId:header.id,ticketConcept:header.concept||'Ticket de compra',ticketKind:header.kind||'despensa',splits:paid[i],memberId:header.payers.length===1?header.payers[0].memberId:null,memberName:header.payers.length===1?header.payers[0].memberName:'Varios integrantes',participantIds:header.participantIds,beneficiaryShares:owed[i],debtFronted:header.mode==='deuda'},false);
+   await t.put('movements',l.id,{...l,date:header.date,total:C.money(l.total),unitCost:l.total/l.qty,purchaseId:header.id,ticketGroupId:header.id,ticketConcept:header.concept||'Ticket de compra',ticketKind:header.kind||'despensa',splits:paid[i],memberId:header.payers.length===1?header.payers[0].memberId:null,memberName:header.payers.length===1?header.payers[0].memberName:'Varios integrantes',participantIds:l.participantIds||header.participantIds,beneficiaryShares:header.mode==='deuda'?owed[i]:(l.beneficiaryShares||owed[i]),debtFronted:header.mode==='deuda'},false);
   }
   const debtIds=[];
   if(header.mode==='deuda'){
@@ -43,9 +53,9 @@
     const l=input.lines[i];C.number(l.qty,'Cantidad',true);let item=null;
     if(l.itemId){item=await t.get('items',l.itemId);if(!item||item.archived)throw Error('Artículo no disponible');const exact=item.trackingMode!=='simple';await t.put('items',l.itemId,{currentQty:exact?C.quantity(item.currentQty,l.qty):item.currentQty,stockStatus:'hay',shoppingFlag:false,shoppingFlagBy:null,shoppingFlagAt:null,updatedAt:input.date});}
     const itemName=item?item.name:l.itemName;if(!itemName)throw Error('Completa el nombre del producto');
-    lines.push({id:t.id+'-'+i,itemId:l.itemId||null,itemName,category:item?item.category:l.category,unit:item?.unit||'',inventoryTracked:!!item&&item.trackingMode!=='simple',qty:l.qty,total:l.total,type:'compra',store:input.store||'',note:input.note||'',date:input.date});
+    lines.push({...(allocation.lineShares[i]?{participantIds:allocation.lineShares[i].map(p=>p.memberId),beneficiaryShares:allocation.lineShares[i]}:{}),id:t.id+'-'+i,itemId:l.itemId||null,itemName,category:item?item.category:l.category,unit:item?.unit||'',inventoryTracked:!!item&&item.trackingMode!=='simple',qty:l.qty,total:l.total,type:'compra',store:input.store||'',note:input.note||'',date:input.date});
    }
-   const header={id:t.id,date:input.date,store:input.store||'',concept:input.concept||'Compra',kind:input.kind||'despensa',mode:input.mode||'normal',participantIds:input.participantIds,payers:allocation.payers,beneficiaryShares:allocation.shares,total:allocation.total};
+   const header={id:t.id,date:input.date,store:input.store||'',concept:input.concept||'Compra',kind:input.kind||'despensa',mode:input.mode||'normal',participantIds:allocation.shares.map(p=>p.memberId),payers:allocation.payers,beneficiaryShares:allocation.shares,total:allocation.total};
    await write(t,header,lines);return t.id;
   });
  }
@@ -66,7 +76,9 @@
    const total=lines.reduce((s,l)=>s+C.cents(l.total),0)/100;
    const payers=C.proportional(C.cents(total),header.payers.map(p=>C.cents(p.amount))).map((n,i)=>({...header.payers[i],amount:n/100}));
    if(payers.length===1&&patch.memberId&&patch.memberId!==payers[0].memberId){if(header.mode==='deuda')throw Error('No se cambia el acreedor de un adelanto');payers[0]={memberId:patch.memberId,memberName:patch.memberName,amount:total};}
-   const shares=C.proportional(C.cents(total),header.beneficiaryShares.map(p=>C.cents(p.amount))).map((n,i)=>({...header.beneficiaryShares[i],amount:n/100}));
+   if(header.mode!=='deuda')for(const line of lines){line.participantIds=line.participantIds||header.participantIds;line.beneficiaryShares=C.allocate(line.total,line.participantIds).map(p=>({memberId:p.memberId,amount:p.cents/100}));}
+   let shares=C.proportional(C.cents(total),header.beneficiaryShares.map(p=>C.cents(p.amount))).map((n,i)=>({...header.beneficiaryShares[i],amount:n/100}));
+   if(header.mode!=='deuda'){const totals=new Map();lines.flatMap(l=>l.beneficiaryShares).forEach(p=>totals.set(p.memberId,(totals.get(p.memberId)||0)+C.cents(p.amount)));shares=[...totals].map(([memberId,n])=>({memberId,amount:n/100}));}
    await write(t,{...header,total,payers,beneficiaryShares:shares,date:patch.date||header.date},lines,header);
   });
  }

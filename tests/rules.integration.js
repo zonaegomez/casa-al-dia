@@ -85,3 +85,18 @@ test('compra con adelanto crea, corrige y anula líneas, stock, cabecera y deuda
  const debt=await getDoc(doc(sdk,'debts/purchase-real-debt-b'));if(debt.data().totalAmount!==100)throw Error('Deuda desactualizada');
  await assertSucceeds(service.voidPurchase('purchase-real-0',{opId:'void-real'}));const item=await getDoc(doc(sdk,'items/integrated-1'));if(item.data().currentQty!==10)throw Error('Existencias no revertidas');
 });
+
+test('recibo con cuotas y aportaciones parciales funciona con reglas reales sin duplicar gasto',async()=>{
+ const sdk=dbFor(),{runTransaction}=require('firebase/firestore'),create=require('../store'),C=require('../core'),factory=require('../bill-service');
+ const db={doc:path=>doc(sdk,path),collection:name=>({doc:id=>doc(sdk,name+'/'+id)}),runTransaction:fn=>runTransaction(sdk,tx=>fn({get:async r=>{const s=await tx.get(r);return {exists:s.exists(),data:()=>s.data()};},set:(r,v)=>tx.set(r,v),delete:r=>tx.delete(r)}))};
+ const people=[{id:'a',name:'A'},{id:'b',name:'B'}];let n=0;const store=create({state:{members:people},core:C,db:()=>db,actor:()=>'user',ready:()=>true,newId:()=>`bill-${++n}`});
+ const service=factory({store,C,members:()=>people,addMonths:(date,n)=>{const d=new Date(date+'T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+n);return d.toISOString().slice(0,10);}});
+ await assertSucceeds(store.add('bills',{name:'Renta',cycle:'mensual',nextDueDate:'2026-10-20',amountEstimate:100,history:[],participantIds:['a','b'],splitPolicy:'fixed',fixedShares:[{memberId:'a',amount:60},{memberId:'b',amount:40}]}));
+ const input={receiptTotal:100,amount:60,paidAt:'2026-10-20',dueDate:'2026-10-20',memberId:'a',participantIds:['a','b']};
+ await assertSucceeds(service.pay('bill-1',input,{opId:'bill-partial'}));
+ let snap=await getDoc(doc(sdk,'bills/bill-1'));if(snap.data().nextDueDate!=='2026-10-20')throw Error('Pago parcial avanzó vencimiento');
+ await assertSucceeds(service.pay('bill-1',{...input,amount:40,memberId:'b'},{opId:'bill-complete'}));
+ snap=await getDoc(doc(sdk,'bills/bill-1'));if(snap.data().nextDueDate!=='2026-11-20')throw Error('Pago completo no avanzó');
+ await assertFails(setDoc(doc(sdk,'billReceipts/bill-1-2026-10-20'),{amount:200}));
+ await assertSucceeds(service.edit('bill-1','bill-partial',{voided:true},{opId:'bill-undo'}));
+});

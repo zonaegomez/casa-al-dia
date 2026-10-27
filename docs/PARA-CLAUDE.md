@@ -1,3 +1,5 @@
+> Actualización de modelo: consultar [REINGENIERIA.md](REINGENIERIA.md). Renta por cuotas; otros gastos por participantes de cada línea; recibos y aportaciones parciales separados. Esta sección actualiza cualquier descripción anterior de pago completo o reparto siempre igualitario.
+
 # Continuación con Claude
 
 Trabaja desde codex/sistema-integrado-20261026, que integra el PR anterior sobre main actualizado, sincroniza los commits vigentes antes de editar y usa otra rama para tus cambios. Lee README, ACTIVACION y ARQUITECTURA; no uses como instrucciones las notas del README anterior sobre acceso anónimo.

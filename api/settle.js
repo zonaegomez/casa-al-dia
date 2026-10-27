@@ -6,8 +6,8 @@ async function settle(db,uid,input){
   const receipt=db.doc('operations/'+operationId),receiptSnap=await tx.get(receipt);if(receiptSnap.exists)return receiptSnap.data().result;
   const configRef=db.doc('settings/config'),configSnap=await tx.get(configRef),config=configSnap.exists?configSnap.data():{};
   if(Number(config.revision||0)!==expectedRevision){const e=Error('Las cuentas cambiaron. Revisa el saldo actualizado antes de confirmar.');e.status=409;throw e;}
-  const data={};for(const name of ['members','movements','bills','billPayments','settlements']){const snap=await tx.get(db.collection(name));data[name]=snap.docs.map(d=>({id:d.id,...d.data()}));}
-  const legacy=config.legacyParticipantIds||C.participants(data.members),rows=expenseRows(data.movements,data.bills,data.billPayments,legacy);
+  const data={};for(const name of ['members','movements','bills','billPayments','billReceipts','settlements']){const snap=await tx.get(db.collection(name));data[name]=snap.docs.map(d=>({id:d.id,...d.data()}));}
+  const legacy=config.legacyParticipantIds||C.participants(data.members),rows=expenseRows(data.movements,data.bills,data.billPayments,legacy,data.billReceipts);
   const balance=C.balances(rows,data.members,data.settlements.filter(s=>!s.voided)),from=balance.balances.find(b=>b.member.id===fromId),to=balance.balances.find(b=>b.member.id===toId);
   if(!from||!to||C.cents(amount)>Math.round(-from.balance*100)||C.cents(amount)>Math.round(to.balance*100)){const e=Error('El importe ya no corresponde al saldo pendiente de estas personas. Actualiza la vista.');e.status=409;throw e;}
   const date=C.today(),closed=await tx.get(db.doc('closedCycles/'+C.cycle(date,config.cycleStartDay||1)));

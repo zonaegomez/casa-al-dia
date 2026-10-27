@@ -679,7 +679,7 @@ function emptyBlock(iconName, text){ return `<div class="empty"><div class="empt
 
 /* ---------------- state ---------------- */
 let state = {
-  purchases:[],members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [], settlements: [], debts: [],
+  billReceipts:[],purchases:[],members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [], settlements: [], debts: [],
   settings: {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0, budgetByCategory:{}, cycleStartDay:1},
   expandedTicketGroups:{}, expenseScope:'todo',
   page: 'dashboard',
@@ -713,7 +713,7 @@ let signedInUser=null, accessReady=false, syncReady=false, accessMessage='', uns
 let rawBills=[], billPayments=[], loadingCollections=new Set();
 const Data = createCasaStore({state,core:CasaCore,db:()=>state.db,actor:()=>signedInUser&&signedInUser.uid,ready:()=>accessReady&&syncReady&&navigator.onLine,newId:uid});
 const Purchases=createPurchaseService({store:Data,C:CasaCore,members:()=>state.members});
-const BillService=createBillService({store:Data,C:CasaCore,addMonths});
+const BillService=createBillService({store:Data,C:CasaCore,addMonths,members:()=>state.members});
 function activeMembers(){return state.members.filter(m=>m.active!==false);}
 function participants(){return CasaCore.participants(state.members);}
 function requireMember(){const m=currentMember();if(!m||m.active===false)throw Error('Selecciona un integrante activo antes de registrar');return m;}
@@ -731,7 +731,7 @@ function boot(){
  firebase.initializeApp(firebaseConfig);
  firebase.auth().onAuthStateChanged(async user=>{
    unsubscribers.forEach(f=>f());unsubscribers=[];accessReady=false;syncReady=false;signedInUser=user;
-   for(const key of ['purchases','members','items','movements','bills','reminders','closedCycles','settlements','debts'])state[key]=[];
+   for(const key of ['billReceipts','purchases','members','items','movements','bills','reminders','closedCycles','settlements','debts'])state[key]=[];
    state.settings={householdName:'Mi Casa',currency:'MXN',monthlyBudget:0,budgetByCategory:{},cycleStartDay:1};
    rawBills=[];billPayments=[];closeModal();render();
    if(!user)return;
@@ -748,7 +748,7 @@ function boot(){
 }
 function mergeBills(){state.bills=rawBills.map(b=>Object.assign({},b,{history:(b.history||[]).map((h,i)=>Object.assign({},h,{_legacyIndex:i})).concat(billPayments.filter(p=>p.billId===b.id&&!p.voided).map(p=>Object.assign({},p,{_paymentId:p.id}))) }));}
 function subscribeAll(){
- const collections=['purchases','members','items','movements','bills','billPayments','reminders','closedCycles','settlements','debts','settings'];
+ const collections=['billReceipts','purchases','members','items','movements','bills','billPayments','billReceipts','reminders','closedCycles','settlements','debts','settings'];
  loadingCollections=new Set(collections);
  collections.forEach(coll=>{
   const ref=coll==='settings'?state.db.doc('settings/config'):state.db.collection(coll);
@@ -814,14 +814,14 @@ function dueSoonBills(days){
 }
 
 const NAV = [
-  {id:'dashboard', label:'Dashboard', icon:'dashboard'},
-  {id:'ubicaciones', label:'Ubicaciones', icon:'home'},
-  {id:'super', label:'Lista del súper', icon:'cart'},
+  {id:'dashboard', label:'Inicio', icon:'dashboard'},
+  {id:'ubicaciones', label:'Espacios', icon:'home'},
+  {id:'super', label:'Por comprar', icon:'cart'},
   {id:'inventario', label:'Inventario', icon:'basket'},
   {id:'servicios', label:'Servicios', icon:'bolt'},
   {id:'cuentas', label:'Cuentas', icon:'cash'},
   {id:'recordatorios', label:'Recordatorios', icon:'bell'},
-  {id:'ciclos', label:'Ciclos e historial', icon:'cycle'},
+  {id:'ciclos', label:'Reportes', icon:'cycle'},
   {id:'config', label:'Miembros y ajustes', icon:'users'}
 ];
 
@@ -935,7 +935,8 @@ function renderMain(){
     servicios: pageServicios, cuentas: pageCuentas, recordatorios: pageRecordatorios,
     ciclos: pageCiclos, config: pageConfig
   };
-  el.innerHTML = (pages[state.page] || pageDashboard)();
+  const help={dashboard:'Qué necesita atención hoy y cómo van las cuentas de la casa.',ubicaciones:'Dónde están las cosas. Los artículos se administran en Inventario.',super:'Lo que falta comprar. Al comprar, registra el ticket una sola vez.',inventario:'Qué hay y cuánto queda. Consumir reduce existencias; no genera otro gasto.',servicios:'Un contrato por servicio; recibos y aportaciones por vencimiento.',cuentas:'Compras y recibos confirmados; aportaciones y saldos por persona.',recordatorios:'Pendientes manuales con fecha.',ciclos:'Gasto comprometido por ciclo. Los recibos se cuentan por vencimiento, las compras por fecha.',config:'Integrantes, presupuestos y preferencias de esta casa.'};
+  el.innerHTML = '<p class="page-sub" style="margin-bottom:16px">'+esc(help[state.page]||'')+'</p>'+(pages[state.page] || pageDashboard)();
   afterRenderHook();
 }
 let afterRenderHook = function(){};
@@ -1186,9 +1187,10 @@ function allExpenseRows(){
   state.movements.filter(m=>m.type==='compra').forEach(m=>{
     rows.push({date:m.date, category:m.category||'otro', name:m.itemName||m.note||'Compra', amount:Number(m.total)||0, memberName:m.memberName, memberId:m.memberId, source:'movement', ref:m,payers:m.splits||null, ticketGroupId:m.ticketGroupId||m.purchaseId||null,ticketConcept:m.ticketConcept||null,ticketKind:m.ticketKind||'despensa',splits:m.splits||null,debtFronted:!!m.debtFronted,beneficiaryShares:m.beneficiaryShares||null, participantIds:m.participantIds||state.settings.legacyParticipantIds||participants()});
   });
-  state.bills.forEach(b=>{(b.history||[]).forEach(h=>{
-    rows.push({date:h.paidAt,category:'servicio',name:b.name,amount:Number(h.amount)||0,memberName:h.memberName,memberId:h.memberId,source:'bill',ref:b,period:h.period,participantIds:h.participantIds||state.settings.legacyParticipantIds||participants(),payers:h.splits||[{memberId:h.memberId,amount:h.amount}]});
+  state.bills.forEach(b=>{(b.history||[]).filter(h=>!h.receiptId).forEach(h=>{
+    rows.push({date:h.paidAt,category:'servicio',name:b.name,amount:Number(h.amount)||0,memberName:h.memberName,memberId:h.memberId,source:'bill',ref:b,period:h.period,participantIds:h.participantIds||state.settings.legacyParticipantIds||participants(),beneficiaryShares:h.beneficiaryShares||null,payers:h.splits||[{memberId:h.memberId,amount:h.amount}]});
   });});
+  for(const receipt of state.billReceipts||[]){const progress=CasaCore.receiptProgress(receipt,billPayments),bill=state.bills.find(b=>b.id===receipt.billId)||{id:receipt.billId};rows.push({date:receipt.dueDate,category:'servicio',name:receipt.name,amount:receipt.amount,source:'bill',ref:bill,participantIds:receipt.participantIds,beneficiaryShares:receipt.beneficiaryShares,payers:progress.payers,allowPartial:true,memberName:progress.pending>0?'Aportaciones pendientes':'Recibo cubierto'});}
   rows.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   return rows;
 }
@@ -1562,7 +1564,7 @@ function pageServicios(){
       <div>
         <div class="page-eyebrow">Pagos recurrentes</div>
         <h1 class="page-title">Servicios</h1>
-        <div class="page-sub">${bills.length} servicio(s) dado(s) de alta</div>
+        <div class="page-sub">Un servicio por contrato. Confirma cada recibo y registra quién aportó; el siguiente vencimiento avanza al cubrirlo completo.</div>
       </div>
       <div class="topbar-actions">
         <button class="btn btn-primary" onclick="App.openBillForm(null)">${icon('plus')} Nuevo servicio</button>
@@ -1580,6 +1582,7 @@ function billCard(b){
     else if(d<=5) status = `<span class="badge badge-warn"><span class="dot dot-warn"></span>Pronto</span>`;
     else status = `<span class="badge badge-good"><span class="dot dot-good"></span>Al día</span>`;
   }
+  const receipt=(state.billReceipts||[]).find(r=>r.billId===b.id&&r.dueDate===b.nextDueDate),progress=receipt?CasaCore.receiptProgress(receipt,billPayments):null;
   const lastPaid = (b.history||[]).slice().sort((x,y)=>(y.paidAt||'').localeCompare(x.paidAt||''))[0];
   return `<div class="bill-card">
     <div class="bill-top">
@@ -1589,10 +1592,12 @@ function billCard(b){
       </div>
       ${status}
     </div>
-    <div class="bill-amount">${b.amountEstimate?fmtMoney(b.amountEstimate):'—'}</div>
+    <div class="bill-amount">${fmtMoney(receipt?receipt.amount:b.amountEstimate||0)}</div>
+    <div class="bill-meta">${receipt?'Recibo confirmado · pendiente '+fmtMoney(progress.pending):(b.amountType==='variable'?'Estimado; confirma el total de este recibo':'Importe por recibo')}${b.splitPolicy==='fixed'?' · cuotas acordadas':' · partes iguales'}</div>
+    ${receipt?'<div style="margin:10px 0">'+progress.members.map(p=>'<div class="bill-meta">'+esc(state.members.find(m=>m.id===p.memberId)?.name||'Integrante')+': '+fmtMoney(p.paid)+' de '+fmtMoney(p.owed)+' · '+Math.round(p.percent)+'%'+(p.credit?' · adelantó '+fmtMoney(p.credit):'')+'</div>').join('')+'</div>':''}
     <div class="bill-meta">${b.nextDueDate? 'Próximo pago: '+fmtDate(b.nextDueDate,{day:'numeric',month:'long'}) : 'Sin próxima fecha'}${lastPaid?' · último pago '+fmtDate(lastPaid.paidAt):''}</div>
     <div class="bill-actions">
-      <button class="btn btn-sm btn-primary" onclick="App.openPayBill('${b.id}')">Marcar pagado</button>
+      <button class="btn btn-sm btn-primary" onclick="App.openPayBill('${b.id}')">Registrar aportación</button>
       <button class="btn btn-sm btn-ghost" onclick="App.openBillHistory('${b.id}')" title="Historial de pagos">${icon('chart')}</button>
       <button class="btn btn-sm btn-ghost" onclick="App.openBillForm('${b.id}')" title="Editar servicio">${icon('edit')}</button>
       <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteBill('${b.id}')" title="Eliminar servicio">${icon('trash')}</button>
@@ -1707,7 +1712,7 @@ function pageCuentas(){
   const titleByTab = {gastos:'Gastos', saldos:'Saldo entre integrantes', deudas:'Deudas internas'};
   const subByTab = {
     gastos: rows.length+' movimiento(s) · total '+fmtMoney(total),
-    saldos: 'Reparto justo del gasto de '+cap(periodLabel(activeCycle, gran)),
+    saldos: 'Saldo acumulado de compras y servicios; los pagos al proveedor pendientes se consultan en Servicios',
     deudas: activeDebts.length+' deuda(s) activa(s)'
   };
   return `
@@ -2122,6 +2127,7 @@ function modalMovement(type, itemId){
       </div>
       <div class="field"><label>Fecha</label><input id="mvDate" type="date" value="${todayISO()}"></div>
       ${isCompra?`<div class="field"><label>Tienda (opcional)</label><input id="mvStore" list="storeSuggestions" placeholder="Ej. HEB"></div>`:''}
+      ${isCompra?beneficiaryFields('mv')+shareModeSectionHtml('mv',activeMembers(),currentMember()):''}
       <div class="field"><label>Nota (opcional)</label><input id="mvNote" placeholder="Ej. oferta 2x1…"></div>
       <datalist id="storeSuggestions">${STORE_SUGGESTIONS.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
     </div>
@@ -2146,6 +2152,7 @@ function ticketRowHtml(items, itemId, freeName, cost){
       <div class="field" style="flex:1; margin:0;"><label>Costo (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="${cost!=null?cost:0}" oninput="App.updateTicketTotal()"></div>
       <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
     </div>
+    <details><summary>Reparto de este producto: usar el del ticket o personalizar</summary><label><input type="checkbox" class="tkCustom"> Elegir participantes para este producto</label><div>${activeMembers().map(m=>'<label style="display:block"><input type="checkbox" class="tk-line-beneficiary" value="'+m.id+'" checked> '+esc(m.name)+'</label>').join('')}</div></details>
     <div class="tkFreeFields" style="display:${isFree?'flex':'none'}; gap:8px;">
       <div class="field" style="flex:2; margin:0;"><label>Nombre (no vinculado a inventario)</label><input class="tkFreeName" value="${esc(freeName||'')}" placeholder="Ej. Jitomate a granel"></div>
       <div class="field" style="flex:1; margin:0;"><label>Categoría</label><select class="tkFreeCat">${freeCats.map(c=>`<option value="${c}" ${c==='despensa'?'selected':''}>${CATS[c]?CATS[c].label:cap(c)}</option>`).join('')}</select></div>
@@ -2259,6 +2266,7 @@ function modalBillForm(id){
         <div class="field"><label>Monto estimado (MXN)</label><input id="blAmount" type="number" step="any" min="0" value="${b?b.amountEstimate||0:0}"></div>
         <div class="field"><label>Próxima fecha de pago</label><input id="blDue" type="date" value="${b?b.nextDueDate||todayISO():todayISO()}"></div>
       </div>
+      ${billAllocationFields(b)}
     </div>
     <div class="modal-foot">
       ${b?`<button class="btn btn-danger" onclick="App.confirmDeleteBill('${b.id}')">Eliminar</button>`:''}
@@ -2267,18 +2275,27 @@ function modalBillForm(id){
   `);
 }
 
+function billAllocationFields(b){
+ const ids=b?.participantIds||participants();
+ return '<div class="field"><label>Importe del servicio</label><select id="blAmountType"><option value="fixed" '+(b?.amountType!=='variable'?'selected':'')+'>Fijo (renta, internet)</option><option value="variable" '+(b?.amountType==='variable'?'selected':'')+'>Variable según recibo (luz, agua, gas)</option></select></div>'+
+ '<div class="field"><label>Reparto</label><select id="blSplitPolicy" onchange="document.getElementById(\'blQuotas\').hidden=this.value!==\'fixed\'"><option value="equal" '+(b?.splitPolicy!=='fixed'?'selected':'')+'>Partes iguales</option><option value="fixed" '+(b?.splitPolicy==='fixed'?'selected':'')+'>Cuotas acordadas por persona</option></select></div>'+
+ '<fieldset class="field"><legend>Participantes del servicio</legend>'+activeMembers().map(m=>'<label style="display:block"><input class="bl-beneficiary" type="checkbox" value="'+m.id+'" '+(ids.includes(m.id)?'checked':'')+'> '+esc(m.name)+'</label>').join('')+'</fieldset>'+
+ '<div id="blQuotas" '+(b?.splitPolicy==='fixed'?'':'hidden')+'><p>Las cuotas deben sumar el total. Se conservarán en cada recibo.</p>'+activeMembers().map(m=>'<div class="field"><label>'+esc(m.name)+'</label><input class="bl-quota" data-member="'+m.id+'" type="number" min="0" step="0.01" value="'+(b?.fixedShares?.find(p=>p.memberId===m.id)?.amount||0)+'"></div>').join('')+'</div>';
+}
 function modalPayBill(id){
   const b = state.bills.find(x=>x.id===id);
   if(!b) return;
   const members = activeMembers().slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const receipt=state.billReceipts.find(r=>r.billId===id&&r.dueDate===b.nextDueDate),progress=receipt?CasaCore.receiptProgress(receipt,billPayments):null;
   openModal(`
-    <div class="modal-header"><h3>Pagar ${esc(b.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-header"><h3>Registrar aportación · ${esc(b.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
       ${members.length>1 ? `<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;">
         <input type="checkbox" id="paySplitToggle" onchange="App.toggleBillPaymentSplit()">
         <span style="font-size:13px;">Se pagó entre varios integrantes (registrar aportaciones reales)</span>
       </label>` : ''}
-      <div class="field" id="payAmountWrap"><label>Monto pagado (MXN)</label><input id="payAmount" type="number" step="any" min="0" value="${b.amountEstimate||0}"></div>
+      <div class="field"><label>Total real del recibo (MXN)</label><input id="payReceiptTotal" type="number" step="0.01" min="0.01" value="${receipt?receipt.amount:b.amountType==='variable'?'':b.amountEstimate||0}" ${receipt?'readonly':''}><small>${receipt?'Pendiente por cubrir: '+fmtMoney(progress.pending):'Confirma el importe completo. La aportación de abajo puede ser parcial.'}</small></div>
+      <div class="field" id="payAmountWrap"><label>Aportación de ${esc(currentMember()?.name||'quien registra')} (MXN)</label><input id="payAmount" type="number" step="0.01" min="0.01" value=""></div>
       <div id="paySplitRows" style="display:none;">
         ${members.map(m=>`<div class="field"><label>${esc(m.name)}</label><input class="pay-split-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="0" oninput="App.recalcSplitTotal()"></div>`).join('')}
         <div class="page-sub" id="paySplitTotalLabel" style="margin-top:-4px;">Total dividido: ${fmtMoney(0)}</div>
@@ -2312,6 +2329,7 @@ function modalEditBillPayment(billId, idx){
   const b = state.bills.find(x=>x.id===billId);
   const h = b && (b.history||[])[idx];
   if(!b || !h){ toast('No se encontró ese pago'); return; }
+  if(h.receiptId){toast('Para corregir esta aportación, anúlala desde el historial y registra la correcta. El recibo y sus cuotas se conservan.');return;}
   const members = activeMembers().slice().sort((a,b)=>a.name.localeCompare(b.name));
   const isSplit = Array.isArray(h.splits) && h.splits.length;
   openModal(`
@@ -2626,9 +2644,11 @@ window.App = {
       subtype: document.getElementById('blSubtype').value,
       cycle: document.getElementById('blCycle').value,
       amountEstimate: Number(document.getElementById('blAmount').value)||0,
+      amountType:document.getElementById('blAmountType').value,splitPolicy:document.getElementById('blSplitPolicy').value,participantIds:[...document.querySelectorAll('.bl-beneficiary:checked')].map(x=>x.value),fixedShares:[...document.querySelectorAll('.bl-quota')].filter(x=>document.querySelector('.bl-beneficiary[value="'+x.dataset.member+'"]')?.checked).map(x=>({memberId:x.dataset.member,amount:CasaCore.money(x.value)})),
       nextDueDate: document.getElementById('blDue').value || todayISO()
     };
     if(!data.name){ toast('Ponle un nombre al servicio'); return; }
+    if(!data.participantIds.length)throw Error('Selecciona participantes');CasaCore.billShares(data,data.amountEstimate,data.participantIds);
     if(id){ const current=state.bills.find(b=>b.id===id);if(current?.history?.length&&(data.cycle!==current.cycle||data.nextDueDate!==current.nextDueDate))throw Error('Con pagos registrados, corrige el recibo vinculado antes de cambiar el calendario'); await Data.set('bills', id, data, true); } else { await Data.add('bills', Object.assign(data,{history:[]}),operationMeta('save-bill')); }
     closeModal(); toast('Servicio guardado'); render();
   },
@@ -2715,7 +2735,7 @@ window.App = {
     downloadFile('gastos_casa.csv', csv);
   },
   exportJSON(){
-    const payload = JSON.stringify({schemaVersion:2,kind:'browser-operational-snapshot',purchases:state.purchases,billPayments,rawBills,members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings, closedCycles:state.closedCycles, settlements:state.settlements, debts:state.debts}, null, 2);
+    const payload = JSON.stringify({schemaVersion:3,kind:'browser-operational-snapshot',billReceipts:state.billReceipts,purchases:state.purchases,billPayments,rawBills,members:state.members, items:state.items, movements:state.movements, bills:state.bills, reminders:state.reminders, settings:state.settings, closedCycles:state.closedCycles, settlements:state.settlements, debts:state.debts}, null, 2);
     downloadFile('respaldo_casa.json', payload);
   },
 
@@ -2799,9 +2819,9 @@ function shareModeSectionHtml(prefix, members, payer){
     <div class="field" style="margin-top:4px;">
       <label>¿Cómo se paga este gasto?</label>
       <select id="${prefix}Mode" onchange="App.toggleShareMode('${prefix}')">
-        <option value="normal">Normal — lo pagó una sola persona</option>
+        <option value="normal">Lo pagó una persona — calcular saldo compartido</option>
         <option value="dividido">Se pagó entre varios — se verificará el saldo pendiente</option>
-        <option value="deuda">Alguien lo adelantó — que se lo regresen (Deuda interna)</option>
+        <option value="deuda">Avanzado: cobrar como deuda separada del saldo compartido</option>
       </select>
     </div>
     <div id="${prefix}DivididoRows" style="display:none; margin-top:4px;">
@@ -2824,6 +2844,7 @@ function shareTotalFor(prefix){
     document.querySelectorAll('.tkCost').forEach(inp=> total += Number(inp.value)||0);
     return total;
   }
+  if(prefix==='mv')return Number(document.getElementById('mvCost')?.value)||0;
   const el = document.getElementById(prefix+'Amount');
   return el ? Number(el.value)||0 : 0;
 }
@@ -2899,6 +2920,7 @@ Object.assign(App,{
   CasaCore.number(cost,'Monto');
   const date=CasaCore.date(document.getElementById('mvDate').value||todayISO()),mem=requireMember();
   const note=document.getElementById('mvNote').value.trim(),store=document.getElementById('mvStore')?.value.trim()||'';
+  if(type==='compra'){await Purchases.create({date,store,note,concept:'Compra de inventario',lines:[{itemId,qty,total:cost}],...readFunding('mv',cost)},operationMeta('inventory-purchase'));closeModal();toast('Compra guardada: gasto, reparto e inventario actualizados');return;}
   await Data.atomic(operationMeta('inventory-movement'),async t=>{
    const item=await t.get('items',itemId);if(!item||item.archived)throw Error('Artículo no disponible');
    await t.put('items',itemId,{currentQty:item.trackingMode==='simple'?Number(item.currentQty||0):CasaCore.quantity(item.currentQty,type==='compra'?qty:-qty),...(item.trackingMode==='simple'&&type==='compra'?{stockStatus:'hay'}:{}),updatedAt:date,...(type==='compra'?{shoppingFlag:false,shoppingFlagBy:null,shoppingFlagAt:null}:{})});
@@ -2907,7 +2929,7 @@ Object.assign(App,{
  },
  async saveTicket(){
  const date=CasaCore.date(document.getElementById('tkDate').value||todayISO());
- const lines=[...document.querySelectorAll('.ticket-row')].map(row=>({itemId:row.querySelector('.tkItem').value==='__free__'?null:row.querySelector('.tkItem').value,qty:CasaCore.number(row.querySelector('.tkQty').value,'Cantidad',true),total:CasaCore.money(row.querySelector('.tkCost').value),itemName:row.querySelector('.tkFreeName')?.value.trim()||'',category:row.querySelector('.tkFreeCat')?.value||'despensa'}));
+ const lines=[...document.querySelectorAll('.ticket-row')].map(row=>({...(row.querySelector('.tkCustom')?.checked?{participantIds:[...row.querySelectorAll('.tk-line-beneficiary:checked')].map(x=>x.value)}:{}),itemId:row.querySelector('.tkItem').value==='__free__'?null:row.querySelector('.tkItem').value,qty:CasaCore.number(row.querySelector('.tkQty').value,'Cantidad',true),total:CasaCore.money(row.querySelector('.tkCost').value),itemName:row.querySelector('.tkFreeName')?.value.trim()||'',category:row.querySelector('.tkFreeCat')?.value||'despensa'}));
  const total=lines.reduce((s,l)=>s+CasaCore.cents(l.total),0)/100,expected=document.getElementById('tkExpectedTotal');
  if(expected&&CasaCore.cents(expected.value)!==CasaCore.cents(total))throw Error('Las líneas no coinciden con el total pagado del ticket');
  await Purchases.create({date,store:document.getElementById('tkStore')?.value.trim()||'',concept:document.getElementById('tkConcept')?.value.trim()||'Ticket de compra',kind:document.getElementById('tkKind')?.value||'despensa',lines,...readFunding('tk',total)},operationMeta('purchase-ticket'));
@@ -2945,8 +2967,8 @@ Object.assign(App,{
   const splits=splitOn?[...document.querySelectorAll('.pay-split-input')].map(i=>({memberId:i.dataset.member,memberName:i.dataset.name,amount:CasaCore.money(i.value)})).filter(s=>s.amount>0):null;
   const amount=splitOn?CasaCore.money(splits.reduce((s,p)=>s+p.amount,0)):CasaCore.money(document.getElementById('payAmount').value);CasaCore.number(amount,'Pago',true);
   const dueDate=document.getElementById('payDueDate')?.value||state.bills.find(b=>b.id===id)?.nextDueDate;
-  await BillService.pay(id,{amount,paidAt,dueDate,memberId:splitOn?null:mem.id,memberName:splitOn?'Varios integrantes':mem.name,participantIds:participants(),...(splits?{splits}:{})},operationMeta('bill-payment'));
-  closeModal();toast('Pago registrado y calendario actualizado');
+  await BillService.pay(id,{receiptTotal:CasaCore.money(document.getElementById('payReceiptTotal').value),amount,paidAt,dueDate,memberId:splitOn?null:mem.id,memberName:splitOn?'Varios integrantes':mem.name,participantIds:participants(),...(splits?{splits}:{})},operationMeta('bill-payment'));
+  closeModal();toast('Aportación guardada. El vencimiento avanza al cubrir el recibo completo');
  },
  async saveEditBillPayment(billId,idx){
   const h=state.bills.find(b=>b.id===billId)?.history[idx];if(!h?._paymentId)throw Error('Este pago es anterior a la actualización. Migra los pagos con el procedimiento documentado antes de editarlo.');

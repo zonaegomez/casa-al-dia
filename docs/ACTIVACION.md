@@ -1,3 +1,5 @@
+> Actualización de modelo: consultar [REINGENIERIA.md](REINGENIERIA.md). Renta por cuotas; otros gastos por participantes de cada línea; recibos y aportaciones parciales separados. Esta sección actualiza cualquier descripción anterior de pago completo o reparto siempre igualitario.
+
 # Activación y conservación de datos
 
 ## 1. Entorno de revisión

@@ -1,9 +1,10 @@
 const {authorize,body,fail}=require('../server/firebase');
 const C=require('../core');
-function expenseRows(movements,bills,payments,legacy){
+function expenseRows(movements,bills,payments,legacy,receipts=[]){
  const rows=movements.filter(m=>!m.voided&&m.type==='compra').map(m=>({date:m.date,category:m.category||'otro',amount:m.total,memberId:m.memberId,participantIds:m.participantIds||legacy,payers:m.splits,beneficiaryShares:m.beneficiaryShares,debtFronted:!!m.debtFronted}));
  for(const b of bills){for(const p of (b.history||[]))rows.push({date:p.paidAt,category:'servicio',amount:p.amount,memberId:p.memberId,payers:p.splits,participantIds:p.participantIds||legacy});}
- for(const p of payments.filter(p=>!p.voided))rows.push({date:p.paidAt,category:'servicio',amount:p.amount,memberId:p.memberId,payers:p.splits,participantIds:p.participantIds||legacy});
+ for(const p of payments.filter(p=>!p.voided&&!p.receiptId))rows.push({date:p.paidAt,category:'servicio',amount:p.amount,memberId:p.memberId,payers:p.splits,participantIds:p.participantIds||legacy});
+ for(const r of receipts.filter(r=>!r.voided)){const progress=C.receiptProgress(r,payments);rows.push({date:r.dueDate,category:'servicio',amount:r.amount,participantIds:r.participantIds,beneficiaryShares:r.beneficiaryShares,payers:progress.payers,allowPartial:true});}
  return rows;
 }
 async function handler(req,res){
@@ -22,9 +23,10 @@ async function closeCycle(db,uid,cycleKey,today=C.today()){
    const cfg=cfgSnap.exists?cfgSnap.data():{};
    if(cycleKey>=C.cycle(today,cfg.cycleStartDay||1)){const e=Error('Solo se pueden cerrar ciclos que ya terminaron');e.status=409;throw e;}
    const data={};
-   for(const coll of ['members','movements','bills','billPayments','settlements']){const snap=await tx.get(db.collection(coll));data[coll]=snap.docs.map(d=>({id:d.id,...d.data()}));}
+   for(const coll of ['members','movements','bills','billPayments','billReceipts','settlements']){const snap=await tx.get(db.collection(coll));data[coll]=snap.docs.map(d=>({id:d.id,...d.data()}));}
    const legacy=cfg.legacyParticipantIds||C.participants(data.members);
-   const rows=expenseRows(data.movements,data.bills,data.billPayments,legacy).filter(r=>C.cycle(r.date,cfg.cycleStartDay||1)===cycleKey);
+   const rows=expenseRows(data.movements,data.bills,data.billPayments,legacy,data.billReceipts).filter(r=>C.cycle(r.date,cfg.cycleStartDay||1)===cycleKey);
+   if(data.billReceipts.some(r=>!r.voided&&C.cycle(r.dueDate,cfg.cycleStartDay||1)===cycleKey&&C.receiptProgress(r,data.billPayments).pending>0)){const e=Error('Hay recibos con aportaciones pendientes en este ciclo; completa o concilia sus pagos antes de cerrar');e.status=409;throw e;}
    const settlements=data.settlements.filter(s=>!s.voided&&C.cycle(s.allocationDate||legacyDate(s,cfg),cfg.cycleStartDay||1)===cycleKey);
    const balance=C.balances(rows,data.members,settlements);
    if(balance.unassigned){const e=Error('Hay gastos sin asignar. Corrige sus pagadores o beneficiarios antes de cerrar.');e.status=409;throw e;}

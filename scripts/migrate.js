@@ -8,6 +8,7 @@ async function migrate(db,apply=false){
  const ids=cfg.legacyParticipantIds||supplied;
  if(!Array.isArray(ids)||!ids.length||ids.some(id=>!known.some(m=>m.id===id)))throw Error('Define LEGACY_PARTICIPANTS como arreglo JSON de IDs reales. Es una base explícita; no reconstruye quién participó históricamente.');
  const bills=await db.collection('bills').get();const plan=[];
+ if(bills.docs.filter(d=>!d.data().archived&&/^Renta (Erick|Axel|Marbet)$/.test(d.data().name)).length)throw Error('Consolida primero la renta con scripts/consolidate-rent.js; no se reparte cada cuota entre tres');
  for(const doc of bills.docs){const history=doc.data().history||[];if(history.length>400)throw Error('Servicio '+doc.id+' supera 400 pagos; necesita migración por lotes específica');if(history.length)plan.push({billId:doc.id,payments:history.length});}
  console.log(JSON.stringify({mode:apply?'apply':'dry-run',legacyParticipantIds:ids,bills:plan},null,2));
  if(!apply)return;

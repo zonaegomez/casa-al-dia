@@ -1,6 +1,6 @@
 const fs=require('node:fs');const {services}=require('../server/firebase');
 const {encode}=require('./codec');
-const COLLECTIONS=['access','settings','members','purchases','items','movements','bills','billPayments','reminders','closedCycles','settlements','debts','operations'];
+const COLLECTIONS=['access','settings','members','purchases','items','movements','bills','billPayments','billReceipts','reminders','closedCycles','settlements','debts','operations'];
 async function backup(db,path){
  const data=await db.runTransaction(async tx=>{
   const collections={};for(const name of COLLECTIONS){const snap=await tx.get(db.collection(name));collections[name]=snap.docs.map(d=>({id:d.id,data:d.data()}));}

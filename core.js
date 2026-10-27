@@ -39,8 +39,8 @@
       if(row.debtFronted)continue;
       const amount=cents(row.amount);
       const ids=row.participantIds;
-      const payers=row.payers?.length?row.payers: [{memberId:row.memberId,amount:row.amount}];
-      if(!ids?.length || new Set(ids).size!==ids.length || ids.some(id=>!map.has(id)) || payers.some(p=>!map.has(p.memberId)) || payers.reduce((s,p)=>s+cents(p.amount),0)!==amount){unassigned+=amount; continue;}
+      const payers=row.allowPartial?(row.payers||[]):(row.payers?.length?row.payers: [{memberId:row.memberId,amount:row.amount}]);
+      if(!ids?.length || new Set(ids).size!==ids.length || ids.some(id=>!map.has(id)) || payers.some(p=>!map.has(p.memberId)) || (row.allowPartial?payers.reduce((s,p)=>s+cents(p.amount),0)>amount:payers.reduce((s,p)=>s+cents(p.amount),0)!==amount)){unassigned+=amount; continue;}
       total+=amount;
       const shares=row.beneficiaryShares?row.beneficiaryShares.map(s=>({memberId:s.memberId,cents:cents(s.amount)})):allocate(row.amount,ids);
       if(shares.reduce((s,p)=>s+p.cents,0)!==amount||shares.length!==ids.length||new Set(shares.map(s=>s.memberId)).size!==ids.length||shares.some(s=>!ids.includes(s.memberId))){total-=amount;unassigned+=amount;continue;}
@@ -59,6 +59,17 @@
     while(c<creditors.length&&d<debtors.length){const cr=creditors[c],de=debtors[d],n=Math.min(cr.amt,de.amt);transfers.push({fromId:de.id,from:de.name,toId:cr.id,to:cr.name,amount:n/100});cr.amt-=n;de.amt-=n;if(!cr.amt)c++;if(!de.amt)d++;}
     return {total:total/100,unassigned:unassigned/100,fairShare:0,balances:result,transfers,settlements};
   }
+  function billShares(bill,amount,ids){
+    if(bill.splitPolicy!=='fixed')return allocate(amount,ids).map(p=>({memberId:p.memberId,amount:p.cents/100}));
+    const shares=bill.fixedShares||[];
+    if(!shares.length||new Set(shares.map(p=>p.memberId)).size!==shares.length||shares.some(p=>!ids.includes(p.memberId))||shares.reduce((s,p)=>s+cents(p.amount),0)!==cents(amount))throw Error('Las cuotas deben sumar el total del recibo y corresponder a sus integrantes');
+    return shares.map(p=>({memberId:p.memberId,amount:money(p.amount)}));
+  }
+  function receiptProgress(receipt,payments){
+    const paid=new Map();for(const p of payments.filter(p=>!p.voided&&p.receiptId===receipt.id)){for(const x of p.splits?.length?p.splits:[{memberId:p.memberId,amount:p.amount}])paid.set(x.memberId,(paid.get(x.memberId)||0)+cents(x.amount));}
+    const totalPaid=[...paid.values()].reduce((s,n)=>s+n,0);
+    return {paid:totalPaid/100,pending:Math.max(0,cents(receipt.amount)-totalPaid)/100,payers:[...paid].map(([memberId,n])=>({memberId,amount:n/100})),members:receipt.beneficiaryShares.map(s=>{const contributed=paid.get(s.memberId)||0,owed=cents(s.amount);return {memberId:s.memberId,owed:owed/100,paid:contributed/100,pending:Math.max(0,owed-contributed)/100,credit:Math.max(0,contributed-owed)/100,percent:owed?Math.min(100,contributed/owed*100):100};})};
+  }
   function quantity(current, delta){ const n=Number(current)+Number(delta); if(!Number.isFinite(n)||n<0) throw Error('La operación dejaría inventario negativo'); return Math.round(n*1e6)/1e6; }
   function proportional(total,weights){
     if(!Number.isSafeInteger(total)||total<0||weights.some(w=>!Number.isSafeInteger(w)||w<0))throw Error('Reparto inválido');
@@ -73,5 +84,5 @@
     for(const share of shares){const parts=proportional(cents(share.amount),remaining);parts.forEach((n,i)=>{columns[i].push({memberId:share.memberId,memberName:share.memberName||'',amount:n/100});remaining[i]-=n;});}
     return columns;
   }
-  return {proportional,matrix,number,cents,money,date,today,cycle,participants,allocate,balances,quantity};
+  return {billShares,receiptProgress,proportional,matrix,number,cents,money,date,today,cycle,participants,allocate,balances,quantity};
 });

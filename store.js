@@ -1,7 +1,7 @@
 /* All writes pass through one transaction; never silently fall back to local data. */
 (function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory;else root.createCasaStore=factory;})(globalThis,function({state,core:C,db:database,actor,ready,newId}){
-  const financial=new Set(['movements','bills','debts','settlements','closedCycles','members','billPayments','purchases']);
-  const fields={items:['currentQty','minQty'],movements:['qty','unitCost','total'],billPayments:['amount'],bills:['amountEstimate'],debts:['totalAmount'],settlements:['amount']};
+  const financial=new Set(['movements','bills','debts','settlements','closedCycles','members','billPayments','billReceipts','purchases']);
+  const fields={items:['currentQty','minQty'],movements:['qty','unitCost','total'],billPayments:['amount'],billReceipts:['amount'],bills:['amountEstimate'],debts:['totalAmount'],settlements:['amount']};
   function validate(coll,data){
     for(const field of fields[coll]||[])if(data[field]!=null)C.number(data[field],field);
     if(data.startDate)C.date(data.startDate);if(data.dueDate)C.date(data.dueDate);
@@ -41,7 +41,8 @@
         validate(coll,data);
         if(coll==='settings'&&prev&&data.cycleStartDay!==prev.cycleStartDay)throw Error('El día de ciclo no puede cambiar sobre un historial existente');
         if(financial.has(coll))touchesFinancial=true;
-        if(coll==='billPayments'){if(prev?.paidAt)dates.add(prev.paidAt);dates.add(data.paidAt);if(data.splits&&data.splits.reduce((s,p)=>s+C.cents(p.amount),0)!==C.cents(data.amount))throw Error('Las aportaciones no coinciden');C.number(data.amount,'Pago',true);}
+        if(coll==='billReceipts'){if(prev?.dueDate)dates.add(prev.dueDate);dates.add(data.dueDate);C.number(data.amount,'Total del recibo',true);if(prev&&JSON.stringify(prev)!==JSON.stringify(data))throw Error('El recibo confirmado conserva su importe y reparto; concilia una corrección antes de cambiarlo');}
+        if(coll==='billPayments'){if(data.receiptId){const r=await get('billReceipts',data.receiptId);if(!r||r.billId!==data.billId||r.dueDate!==data.dueDate)throw Error('Recibo de origen inválido');dates.add(r.dueDate);}if(prev?.paidAt)dates.add(prev.paidAt);dates.add(data.paidAt);if(data.splits&&data.splits.reduce((s,p)=>s+C.cents(p.amount),0)!==C.cents(data.amount))throw Error('Las aportaciones no coinciden');C.number(data.amount,'Pago',true);}
         if(coll==='movements'&&data.splits&&data.splits.length&&data.splits.reduce((s,p)=>s+C.cents(p.amount),0)!==C.cents(data.total))throw Error('Las aportaciones no coinciden con el gasto');
     if(coll==='purchases'){if(prev?.date)dates.add(prev.date);dates.add(data.date);}
         if(coll==='movements'){if(prev?.date)dates.add(prev.date);dates.add(data.date);}

@@ -23,6 +23,7 @@ service cloud.firestore {
    let before=exists(/databases/$(database)/documents/settings/config)?config().get('revision',0):0;
    return getAfter(/databases/$(database)/documents/settings/config).data.revision == before+1;
   }
+  function receiptOpen(d) {return !d.keys().hasAny(['receiptId']) || (existsAfter(/databases/$(database)/documents/billReceipts/$(d.receiptId)) && open(getAfter(/databases/$(database)/documents/billReceipts/$(d.receiptId)).data.dueDate));}
   function participants(d) {return d.participantIds is list && d.participantIds.size()>0 && d.participantIds.size()<=50;}
   match /access/{uid} {allow get: if request.auth!=null && request.auth.uid==uid;allow list,write: if false;}
   match /settings/{id} {
@@ -66,10 +67,15 @@ service cloud.firestore {
    allow update: if actor() && revision() && request.resource.data.get('history',[])==resource.data.get('history',[]) && nonnegative(request.resource.data.amountEstimate) && validDate(request.resource.data.nextDueDate);
    allow delete: if false;
   }
+  match /billReceipts/{id} {
+   allow read: if member();
+   allow create: if actor() && revision() && open(request.resource.data.dueDate) && participants(request.resource.data) && request.resource.data.amount is number && request.resource.data.amount>0 && request.resource.data.beneficiaryShares is list && request.resource.data.billId is string;
+   allow update,delete: if false;
+  }
   match /billPayments/{id} {
    allow read: if member();
-   allow create: if actor() && revision() && open(request.resource.data.paidAt) && participants(request.resource.data) && request.resource.data.amount is number && request.resource.data.amount>0 && request.resource.data.amount<100000000 && request.resource.data.billId is string;
-   allow update: if actor() && revision() && open(resource.data.paidAt) && open(request.resource.data.paidAt) && participants(request.resource.data) && request.resource.data.billId==resource.data.billId && request.resource.data.amount is number && request.resource.data.amount>0 && request.resource.data.amount<100000000;
+   allow create: if actor() && revision() && receiptOpen(request.resource.data) && open(request.resource.data.paidAt) && participants(request.resource.data) && request.resource.data.amount is number && request.resource.data.amount>0 && request.resource.data.amount<100000000 && request.resource.data.billId is string;
+   allow update: if actor() && revision() && receiptOpen(resource.data) && receiptOpen(request.resource.data) && open(resource.data.paidAt) && open(request.resource.data.paidAt) && participants(request.resource.data) && request.resource.data.billId==resource.data.billId && request.resource.data.amount is number && request.resource.data.amount>0 && request.resource.data.amount<100000000;
    allow delete: if false;
   }
   match /settlements/{id} {

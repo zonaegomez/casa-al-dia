@@ -1,3 +1,5 @@
+> Actualización de modelo: consultar [REINGENIERIA.md](docs/REINGENIERIA.md). Renta por cuotas; otros gastos por participantes de cada línea; recibos y aportaciones parciales separados. Esta sección actualiza cualquier descripción anterior de pago completo o reparto siempre igualitario.
+
 # Casa al Día
 
 Aplicación doméstica de inventario, compras, servicios y cuentas compartidas.
