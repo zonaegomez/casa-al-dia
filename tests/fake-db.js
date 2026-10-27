@@ -2,7 +2,7 @@ const clone=v=>v==null?v:structuredClone(v);
 function fakeDB(seed={}){
  const docs=new Map(Object.entries(seed).map(([k,v])=>[k,{value:clone(v),version:1}]));let failures=0;
  const doc=path=>({path});
- return {doc,collection:name=>({doc:id=>doc(name+'/'+id)}),failNext(){failures++;},read:path=>clone(docs.get(path)?.value),
+ return {doc,collection:name=>({doc:id=>doc(name+'/'+id)}),failNext(){failures++;},snapshot:()=>Object.fromEntries([...docs].map(([path,entry])=>[path,clone(entry.value)])),read:path=>clone(docs.get(path)?.value),
   async runTransaction(fn){
    for(let attempt=0;attempt<20;attempt++){
     const reads=new Map(),writes=[];let wrote=false;
@@ -15,3 +15,4 @@ function fakeDB(seed={}){
  };
 }
 module.exports=fakeDB;
+

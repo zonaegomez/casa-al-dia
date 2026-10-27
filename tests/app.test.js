@@ -25,3 +25,10 @@ test('la cuenta vinculada define identidad y rechaza un selector antiguo o manip
  const {api,App}=app();api.state.memberId='b';assert.equal(api.currentMember().id,'a');assert.equal(App.selectMember,undefined);
  api.setIdentity('b');assert.equal(api.currentMember().id,'b');api.setIdentity(null);assert.equal(api.currentMember(),null);
 });
+
+test('consumo rápido y estados se integran sin agregar gastos ni cambiar saldos',async()=>{
+ const purchase={id:'p',type:'compra',total:100,qty:1,date:'2026-10-20',memberId:'a',participantIds:['a','b']};const {api,App,db}=app({'movements/p':purchase,'items/coffee':{name:'Café',category:'despensa',unit:'pza',currentQty:0,minQty:0,trackingMode:'simple',stockStatus:'hay'}});
+ api.state.movements=[purchase];api.state.items.push({id:'coffee',...db.read('items/coffee')});const before=JSON.stringify(api.computeBalances());
+ await App.quickConsume('rice');const a=api.state.inventoryUndo;assert.equal(db.read('items/rice').currentQty,9);api.state.movements.push({id:a.id,...db.read('movements/'+a.id)});assert.equal(api.allExpenseRows().length,1);assert.equal(JSON.stringify(api.computeBalances()),before);
+ await App.setStockStatus('coffee','comprar');assert.equal(db.read('items/coffee').shoppingFlag,true);assert.equal(api.allExpenseRows().length,1);assert.equal(JSON.stringify(api.computeBalances()),before);
+});

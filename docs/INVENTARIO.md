@@ -1,0 +1,7 @@
+# Inventario cotidiano con menos captura
+
+- Los artículos nuevos usan control sencillo por defecto: Hay, Queda poco o Se acabó. Sus botones actualizan el estado sin formulario. Queda poco y Se acabó activan Por comprar y quitan cualquier aplazamiento anterior. Hay retira la marca de reposición.
+- Los artículos existentes mantienen su modo y cantidad. En modo exacto, Usé 1 descuenta una unidad indicada en el botón, con la fecha actual de México. Más opciones permite otra cantidad y despliega fecha y nota solo si se necesitan. Si queda menos de una unidad, Usé 1 se desactiva y se conserva la captura de cantidades fraccionarias.
+- La nota de consumo deja de usar el ejemplo de ofertas de compra. El consumo no genera otro gasto ni modifica el reparto o saldos. Se conserva un movimiento de cantidad con importe cero para poder conciliar y deshacer.
+- Deshacer revierte la última acción del inventario. Un consumo se devuelve sumando a la existencia vigente, sin pisar compras o consumos posteriores; un estado solo se restaura si nadie volvió a modificarlo. Reponer invalida el deshacer de estados anteriores. No se permite cambiar cantidades bajo cero ni alterar ciclos cerrados.
+- Editar permite elegir entre estados y cantidades. Al pasar de sencillo a exacto hay que contar y capturar existencias actuales; la cantidad histórica congelada no se presenta como cantidad vigente. No se ejecuta una conversión masiva de datos.

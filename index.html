@@ -268,6 +268,8 @@
   .swipe-action-left{left:0; background:var(--bad);}
   .swipe-action-right{right:0; background:var(--accent);}
   .swipe-row.swipe-open-left .swipe-action-left, .swipe-row.swipe-open-right .swipe-action-right{opacity:1; pointer-events:auto;}
+  .inventory-actions{max-width:360px!important;}
+  @media(max-width:760px){.inventory-actions{flex-basis:100%;justify-content:flex-start;max-width:100%!important;}.swipe-content.list-item:has(.inventory-actions){flex-wrap:wrap;}.swipe-content.list-item:has(.inventory-actions) .list-main{min-width:0;}}
   .row-actions-wrap{display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; max-width:230px;}
 
   .member-row{display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); transition:background .12s ease;}
@@ -388,6 +390,7 @@
   .modal-header h3{margin:0; font-size:18px; font-family:'Manrope',sans-serif; font-weight:600;}
   .modal-body{padding:6px 19px 19px; display:flex; flex-direction:column; gap:12px;}
   .modal-foot{display:flex; justify-content:flex-end; gap:8px; padding:4px 19px 19px;}
+  [hidden]{display:none!important;}
   .field{display:flex; flex-direction:column; gap:5px;}
   .field label{font-size:12px; font-weight:700; color:var(--ink-soft);}
   .field input, .field select, .field textarea{
@@ -495,6 +498,7 @@ window.CASA_THEME_KEY = 'casa-theme-v1';
 <script src="store.js"></script>
 <script src="purchase-service.js"></script>
 <script src="bill-service.js"></script>
+<script src="inventory-service.js"></script>
 <script>
 /* ============================================================
    CASA AL DÍA — ERP doméstico
@@ -681,7 +685,7 @@ function emptyBlock(iconName, text){ return `<div class="empty"><div class="empt
 let state = {
   billReceipts:[],purchases:[],members: [], items: [], movements: [], bills: [], reminders: [], closedCycles: [], settlements: [], debts: [],
   settings: {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0, budgetByCategory:{}, cycleStartDay:1},
-  expandedTicketGroups:{}, expenseScope:'todo',
+  inventoryUndo:null, expandedTicketGroups:{}, expenseScope:'todo',
   page: 'dashboard',
   invTab: 'todos',
   invSearch: '',
@@ -714,6 +718,7 @@ let rawBills=[], billPayments=[], loadingCollections=new Set();
 const Data = createCasaStore({state,core:CasaCore,db:()=>state.db,actor:()=>signedInUser&&signedInUser.uid,ready:()=>accessReady&&syncReady&&navigator.onLine,newId:uid});
 const Purchases=createPurchaseService({store:Data,C:CasaCore,members:()=>state.members});
 const BillService=createBillService({store:Data,C:CasaCore,addMonths,members:()=>state.members});
+const InventoryService=createInventoryService({store:Data,C:CasaCore,members:()=>state.members});
 function activeMembers(){return state.members.filter(m=>m.active!==false);}
 function participants(){return CasaCore.participants(state.members);}
 function requireMember(){const m=currentMember();if(!m||m.active===false)throw Error('Tu cuenta necesita estar vinculada a un integrante activo antes de registrar');return m;}
@@ -731,7 +736,7 @@ function boot(){
  firebase.initializeApp(firebaseConfig);
  firebase.auth().onAuthStateChanged(async user=>{
    localStorage.removeItem('casa_al_dia_member_id');
-   unsubscribers.forEach(f=>f());unsubscribers=[];if(privateLoanUnsubscribe)privateLoanUnsubscribe();privateLoanUnsubscribe=null;privateLoans=[];privateLoanMessage='';accountMemberId=null;accessReady=false;syncReady=false;signedInUser=user;
+   unsubscribers.forEach(f=>f());unsubscribers=[];if(privateLoanUnsubscribe)privateLoanUnsubscribe();privateLoanUnsubscribe=null;privateLoans=[];privateLoanMessage='';accountMemberId=null;state.inventoryUndo=null;accessReady=false;syncReady=false;signedInUser=user;
    for(const key of ['billReceipts','purchases','members','items','movements','bills','reminders','closedCycles','settlements','debts'])state[key]=[];
    state.settings={householdName:'Mi Casa',currency:'MXN',monthlyBudget:0,budgetByCategory:{},cycleStartDay:1};
    rawBills=[];billPayments=[];closeModal();render();
@@ -943,7 +948,7 @@ function renderMain(){
     servicios: pageServicios, cuentas: pageCuentas, recordatorios: pageRecordatorios,
     ciclos: pageCiclos, config: pageConfig
   };
-  const help={dashboard:'Qué necesita atención hoy y cómo van las cuentas de la casa.',ubicaciones:'Dónde están las cosas. Los artículos se administran en Inventario.',super:'Lo que falta comprar. Al comprar, registra el ticket una sola vez.',inventario:'Qué hay y cuánto queda. Consumir reduce existencias; no genera otro gasto.',servicios:'Un contrato por servicio; recibos y aportaciones por vencimiento.',cuentas:'Compras y recibos confirmados; aportaciones y saldos por persona.',recordatorios:'Pendientes manuales con fecha.',ciclos:'Gasto comprometido por ciclo. Los recibos se cuentan por vencimiento, las compras por fecha.',config:'Integrantes, presupuestos y preferencias de esta casa.'};
+  const help={dashboard:'Qué necesita atención hoy y cómo van las cuentas de la casa.',ubicaciones:'Dónde están las cosas. Los artículos se administran en Inventario.',super:'Lo que falta comprar. Al comprar, registra el ticket una sola vez.',inventario:'Actualiza lo que hay con un toque. Usar productos o cambiar su estado no genera otro gasto.',servicios:'Un contrato por servicio; recibos y aportaciones por vencimiento.',cuentas:'Compras y recibos confirmados; aportaciones y saldos por persona.',recordatorios:'Pendientes manuales con fecha.',ciclos:'Gasto comprometido por ciclo. Los recibos se cuentan por vencimiento, las compras por fecha.',config:'Integrantes, presupuestos y preferencias de esta casa.'};
   el.innerHTML = '<p class="page-sub" style="margin-bottom:16px">'+esc(help[state.page]||'')+'</p>'+(pages[state.page] || pageDashboard)();
   afterRenderHook();
 }
@@ -1535,7 +1540,7 @@ function inventoryTable(items){
     const low = !out && (it.trackingMode==='simple'?it.stockStatus==='poco':Number(it.minQty)>0 && Number(it.currentQty)<=Number(it.minQty));
     const badge = out ? `<span class="badge badge-bad"><span class="dot dot-bad"></span>Agotado</span>` : low ? `<span class="badge badge-warn"><span class="dot dot-warn"></span>Bajo</span>` : `<span class="badge badge-good"><span class="dot dot-good"></span>OK</span>`;
     const subBits = [it.brand?esc(it.brand):'', esc(it.unit||''), it.group?esc(it.group):''].filter(Boolean);
-    const metaBits = [it.trackingMode==='simple'?`Estado: ${{hay:'Hay',poco:'Queda poco',comprar:'Comprar'}[it.stockStatus]||'Comprar'}`:`${Number(it.currentQty)||0} ${esc(it.unit||'')} en existencia`, Number(it.minQty)>0?`mínimo ${Number(it.minQty)} ${esc(it.unit||'')}`:'', it.updatedAt?'últ. mov. '+fmtDate(it.updatedAt):''].filter(Boolean);
+    const metaBits = [it.trackingMode==='simple'?`Estado: ${{hay:'Hay',poco:'Queda poco',comprar:'Se acabó'}[it.stockStatus]||'Se acabó'}`:`${Number(it.currentQty)||0} ${esc(it.unit||'')} en existencia`, it.trackingMode!=='simple'&&Number(it.minQty)>0?`mínimo ${Number(it.minQty)} ${esc(it.unit||'')}`:'', it.updatedAt?'últ. mov. '+fmtDate(it.updatedAt):''].filter(Boolean);
     return `<div class="swipe-row">
       <div class="swipe-action swipe-action-left" onclick="App.confirmDeleteItem('${it.id}')">${icon('trash')}<span>Eliminar</span></div>
       <div class="swipe-action swipe-action-right" onclick="App.openMovement('compra','${it.id}')">${icon('plus')}<span>Comprar</span></div>
@@ -1545,9 +1550,9 @@ function inventoryTable(items){
           <div class="list-title">${esc(it.name)} ${badge}</div>
           <div class="list-sub">${[...subBits, ...metaBits].join(' · ')}</div>
         </div>
-        <div class="list-end row-actions-wrap">
+        <div class="list-end row-actions-wrap inventory-actions">
           <button class="btn btn-sm ${it.shoppingFlag?'':'btn-ghost'}" style="${it.shoppingFlag?'background:var(--warn-soft);color:var(--warn);border-color:transparent;':''}" onclick="App.toggleShoppingFlag('${it.id}')" title="${it.shoppingFlag?'En la lista del súper — quitar':'Se está acabando: agregar a la lista del súper'}">${icon('cart')}</button>
-          ${it.trackingMode==='simple'?`<button class="btn btn-sm" onclick="App.openItemForm('${it.id}')">Estado</button>`:`<button class="btn btn-sm" onclick="App.openMovement('consumo','${it.id}')" title="Registrar consumo">${icon('basket')}</button>`}
+          ${it.trackingMode==='simple'?stockButtons(it):`<button class="btn btn-sm" onclick="App.quickConsume('${it.id}')" ${Number(it.currentQty)<1?'disabled':''} title="Restar 1 ${esc(it.unit||'unidad')} de las existencias">Usé 1 ${esc(it.unit||'')}</button><button class="btn btn-sm btn-ghost" onclick="App.openMovement('consumo','${it.id}')">Más opciones</button>`}
           <button class="btn btn-sm btn-primary" onclick="App.openMovement('compra','${it.id}')" title="Registrar compra">${icon('plus')}</button>
           <button class="btn btn-sm btn-ghost" onclick="App.openPriceCompare('${it.id}')" title="Comparar precios entre tiendas">${icon('chart')}</button>
           <button class="btn btn-sm btn-ghost" onclick="App.openItemForm('${it.id}')" title="Editar">${icon('edit')}</button>
@@ -1556,7 +1561,7 @@ function inventoryTable(items){
       </div>
     </div>`;
   };
-  return `<div class="swipe-list">
+  return `${state.inventoryUndo?'<div class="panel" role="status" style="margin-bottom:12px;padding:12px">'+esc(state.inventoryUndoMessage||'Inventario actualizado')+' <button class="btn btn-sm" onclick="App.undoInventory()">Deshacer</button></div>':''}<div class="swipe-list">
     ${groupKeys.map(loc=>`
       <div class="list-group-label">${esc(loc)}</div>
       ${groups[loc].slice().sort(sortFn).map(rowHtml).join('')}
@@ -2049,7 +2054,7 @@ function modalMemberForm(id){
   openModal(`
     <div class="modal-header"><h3>${m?'Editar miembro':'Nuevo miembro'}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
-      <div class="field"><label>Nombre</label><input id="mName" value="${m?esc(m.name):''}" placeholder="Ej. Erick"></div>
+      <div class="field"><label>Nombre</label><input id="mName" value="${m?esc(m.name):''}" placeholder="Nombre del integrante"></div>
       <div class="field"><label>Color</label><div class="swatches">${MEMBER_COLORS.map(c=>`<div class="swatch ${(m?m.color:MEMBER_COLORS[0])===c?'sel':''}" style="background:${c}" data-color="${c}" onclick="App.pickColor(this)"></div>`).join('')}</div></div>
     </div>
     <div class="modal-foot">
@@ -2059,20 +2064,30 @@ function modalMemberForm(id){
   `);
 }
 
+function stockButtons(it,closeAfter=false){return '<div style="display:flex;flex-wrap:wrap;gap:4px" role="group" aria-label="Estado de '+esc(it.name)+'">'+[['hay','Hay'],['poco','Queda poco'],['comprar','Se acabó']].map(([value,label])=>'<button class="btn btn-sm '+(it.stockStatus===value?'btn-primary':'')+'" aria-pressed="'+(it.stockStatus===value)+'" onclick="App.setStockStatus(\''+it.id+'\',\''+value+'\','+closeAfter+')">'+label+'</button>').join('')+'</div>';}
+function modalConsumption(itemId){
+ const items=state.items.slice().sort((a,b)=>a.name.localeCompare(b.name)),it=items.find(i=>i.id===itemId)||items[0];if(!it)return;
+ openModal(`<div class="modal-header"><h3>Actualizar existencias</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div><div class="modal-body">
+ <div class="field"><label>Artículo</label><select id="mvItem" onchange="App.openMovement('consumo',this.value)">${items.map(i=>'<option value="'+i.id+'" '+(i.id===it.id?'selected':'')+'>'+esc(i.name)+'</option>').join('')}</select></div>
+ ${it.trackingMode==='simple'?'<p>Marca cómo está. Queda poco y Se acabó lo agregan a Por comprar.</p>'+stockButtons(it,true):`<p>Hay ${Number(it.currentQty)||0} ${esc(it.unit||'unidades')}.</p><div class="field"><label>Cantidad que usaste (${esc(it.unit||'unidades')})</label><input id="mvQty" type="number" step="any" min="0.001" max="${Number(it.currentQty)||0}" value="1"></div><details><summary>Más opciones</summary><div class="field"><label>Fecha</label><input id="mvDate" type="date" value="${todayISO()}"></div><div class="field"><label>Nota (opcional)</label><input id="mvNote" placeholder="Ej. se terminó un envase"></div></details>`}
+ </div>${it.trackingMode==='simple'?'':`<div class="modal-foot"><button class="btn btn-primary" onclick="App.saveMovement('consumo')">Actualizar</button></div>`}`);
+}
 function modalItemForm(id, defaultCat){
   const it = id ? state.items.find(x=>x.id===id) : null;
   state.editItemOriginal=it?{...it}:null;
+  const simple=it?it.trackingMode==='simple':true;
+  const stock=it?(it.trackingMode==='simple'?it.stockStatus:Number(it.currentQty)<=0?'comprar':Number(it.minQty)>0&&Number(it.currentQty)<=Number(it.minQty)?'poco':'hay'):'hay';
   openModal(`
     <div class="modal-header"><h3>${it?'Editar artículo':'Nuevo artículo'}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
       <div class="field"><label>Nombre</label><input id="itName" value="${it?esc(it.name):''}" placeholder="Ej. Papel higiénico"></div>
-      <div class="field-row"><div class="field"><label>Control de existencias</label><select id="itTracking"><option value="exact" ${!it||it.trackingMode!=='simple'?'selected':''}>Cantidad exacta</option><option value="simple" ${it&&it.trackingMode==='simple'?'selected':''}>Estado sencillo</option></select></div><div class="field"><label>Estado (modo sencillo)</label><select id="itStockStatus"><option value="hay">Hay</option><option value="poco" ${it&&it.stockStatus==='poco'?'selected':''}>Queda poco</option><option value="comprar" ${it&&it.stockStatus==='comprar'?'selected':''}>Comprar</option></select></div></div>
+      <div class="field"><label>¿Cómo quieres llevar este artículo?</label><select id="itTracking" onchange="App.toggleItemTracking()"><option value="simple" ${simple?'selected':''}>Sencillo: Hay / Queda poco / Se acabó</option><option value="exact" ${!simple?'selected':''}>Contar cantidades exactas</option></select><small>El modo sencillo evita registrar cada consumo.</small></div><div class="field" id="itStatusWrap" ${simple?'':'hidden'}><label>Estado actual</label><select id="itStockStatus">${[['hay','Hay'],['poco','Queda poco'],['comprar','Se acabó']].map(([v,l])=>'<option value="'+v+'" '+(stock===v?'selected':'')+'>'+l+'</option>').join('')}</select></div>
       <div class="field"><label>Marca preferida (opcional)</label><input id="itBrand" value="${it?esc(it.brand||''):''}" placeholder="Ej. Nescafé Clásico"></div>
       <div class="field-row">
         <div class="field"><label>Categoría</label><select id="itCat">${INVENTORY_CATS.map(c=>`<option value="${c}" ${(it?it.category:defaultCat)===c?'selected':''}>${CATS[c].label}</option>`).join('')}</select></div>
         <div class="field"><label>Unidad</label><select id="itUnit">${UNITS.map(u=>`<option ${it&&it.unit===u?'selected':''}>${u}</option>`).join('')}</select></div>
       </div>
-      <div class="field-row">
+      <div class="field-row" id="itQuantityWrap" ${simple?'hidden':''}>
         <div class="field"><label>Existencia actual</label><input id="itQty" type="number" step="any" min="0" value="${it?it.currentQty:0}"></div>
         <div class="field"><label>Mínimo deseado</label><input id="itMin" type="number" step="any" min="0" value="${it?it.minQty:0}"></div>
       </div>
@@ -2148,7 +2163,7 @@ function modalMovement(type, itemId){
       <div class="field"><label>Fecha</label><input id="mvDate" type="date" value="${todayISO()}"></div>
       ${isCompra?`<div class="field"><label>Tienda (opcional)</label><input id="mvStore" list="storeSuggestions" placeholder="Ej. HEB"></div>`:''}
       ${isCompra?beneficiaryFields('mv')+shareModeSectionHtml('mv',activeMembers(),currentMember()):''}
-      <div class="field"><label>Nota (opcional)</label><input id="mvNote" placeholder="Ej. oferta 2x1…"></div>
+      <div class="field"><label>Nota (opcional)</label><input id="mvNote" placeholder="${isCompra?'Ej. oferta 2×1':'Ej. se terminó un envase'}"></div>
       <datalist id="storeSuggestions">${STORE_SUGGESTIONS.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
     </div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveMovement('${type}')">Guardar</button></div>
@@ -2491,13 +2506,19 @@ window.App = {
   async saveItem(id){
     const data={name:document.getElementById('itName').value.trim(),brand:document.getElementById('itBrand').value.trim(),category:document.getElementById('itCat').value,unit:document.getElementById('itUnit').value,currentQty:CasaCore.number(document.getElementById('itQty').value,'Existencia'),minQty:CasaCore.number(document.getElementById('itMin').value,'Mínimo'),trackingMode:document.getElementById('itTracking').value,stockStatus:document.getElementById('itStockStatus').value,location:document.getElementById('itLocation').value||'',group:document.getElementById('itGroup').value.trim(),updatedAt:todayISO()};
     if(!data.name)throw Error('Ponle un nombre al artículo');
+    if(data.trackingMode==='exact'&&document.getElementById('itQty').value==='')throw Error('Cuenta las existencias actuales antes de activar cantidades exactas');
     const original=state.editItemOriginal?{...state.editItemOriginal}:null,requestedQty=data.currentQty;
+    const statusTouched=!id||data.trackingMode!==(original?.trackingMode||'exact')||data.stockStatus!==original?.stockStatus;
     await Data.atomic(operationMeta('save-item'),async t=>{
       if(id){const current=await t.get('items',id);if(!current)throw Error('Artículo no disponible');
+        if(original&&(current.trackingMode||'exact')!==(original.trackingMode||'exact'))throw Error('El control del artículo cambió. Abre de nuevo su edición.');
+        if(data.trackingMode==='simple'&&!statusTouched)data.stockStatus=current.stockStatus;
         if(data.unit!==current.unit&&Number(current.currentQty)!==0)throw Error('No cambies unidades con existencias; registra un ajuste antes de convertirlas');
         if(original&&requestedQty!==Number(original.currentQty)&&Number(current.currentQty)!==Number(original.currentQty))throw Error('La existencia cambió mientras editabas. Abre de nuevo el artículo.');
-        if(original&&requestedQty===Number(original.currentQty))data.currentQty=current.currentQty;
+        if(data.trackingMode==='simple'||(original&&requestedQty===Number(original.currentQty)&&original.trackingMode!=='simple'))data.currentQty=current.currentQty;
       }
+      data.stockActionId=null;
+      if(data.trackingMode==='simple'&&statusTouched){data.shoppingSnoozedUntil=null;data.shoppingFlag=data.stockStatus!=='hay';data.shoppingFlagBy=null;data.shoppingFlagAt=data.shoppingFlag?todayISO():null;}
       await t.put('items',id||t.id,data,!!id);
     });closeModal();toast('Artículo guardado');
   },
@@ -2507,11 +2528,11 @@ window.App = {
     const it = state.items.find(i=>i.id===id);
     if(!it) return;
     if(it.shoppingFlag){
-      await Data.set('items', id, {shoppingFlag:false, shoppingFlagBy:null, shoppingFlagAt:null}, true);
+      await Data.set('items', id, {stockActionId:null,shoppingFlag:false, shoppingFlagBy:null, shoppingFlagAt:null}, true);
       toast('Quitado de la lista del súper');
     } else {
       const mem = currentMember();
-      await Data.set('items', id, {shoppingFlag:true, shoppingSnoozedUntil:null, shoppingFlagBy: mem?mem.name:'—', shoppingFlagAt: todayISO()}, true);
+      await Data.set('items', id, {stockActionId:null,shoppingFlag:true, shoppingSnoozedUntil:null, shoppingFlagBy: mem?mem.name:'—', shoppingFlagAt: todayISO()}, true);
       toast('Agregado a la lista del súper');
     }
     render();
@@ -2523,6 +2544,7 @@ window.App = {
       modalItemForm(null, INVENTORY_CATS[0]);
       return;
     }
+    if(type==='consumo'){modalConsumption(itemId);return;}
     modalMovement(type, itemId);
   },
   updateMovementBrandHint(){
@@ -2885,8 +2907,12 @@ function readFunding(prefix,total){
 }
 /* Integrity commands: explicit units of work, immutable operation receipts. */
 Object.assign(App,{
+ toggleItemTracking(){const simple=document.getElementById('itTracking').value==='simple';document.getElementById('itStatusWrap').hidden=!simple;document.getElementById('itQuantityWrap').hidden=simple;if(!simple&&state.editItemOriginal?.trackingMode==='simple')document.getElementById('itQty').value='';},
+ async quickConsume(itemId){const mem=requireMember(),action=await InventoryService.consume({itemId,qty:1,date:todayISO(),memberId:mem.id},{kind:'quick-consumption',opId:uid()});state.inventoryUndo=action;state.inventoryUndoMessage='Usaste 1 '+action.unit+' de '+action.name+'. Quedan '+action.remaining+'.';},
+ async setStockStatus(itemId,status,closeAfter=false){requireMember();const action=await InventoryService.setStatus(itemId,status,{kind:'stock-status',opId:uid()});if(action){state.inventoryUndo=action;state.inventoryUndoMessage=action.name+': '+({hay:'Hay',poco:'Queda poco',comprar:'Se acabó'})[status]+(status==='hay'?'':'. Agregado a Por comprar');}if(closeAfter){closeModal();toast('Estado actualizado');}},
+ async undoInventory(){const action=state.inventoryUndo;if(!action)return;await InventoryService.undo(action,{kind:'undo-inventory',opId:uid()});if(state.inventoryUndo===action)state.inventoryUndo=null;},
  setExpenseScope(scope){state.expenseScope=scope;render();},
- async snoozeShopping(id){const d=new Date(todayISO()+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+7);await Data.set('items',id,{shoppingSnoozedUntil:d.toISOString().slice(0,10)},true);toast('Reposición pospuesta 7 días');},
+ async snoozeShopping(id){const d=new Date(todayISO()+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+7);await Data.set('items',id,{stockActionId:null,shoppingSnoozedUntil:d.toISOString().slice(0,10)},true);toast('Reposición pospuesta 7 días');},
  toggleTicketGroup(groupId){ state.expandedTicketGroups[groupId] = !state.expandedTicketGroups[groupId]; render(); },
  recalcShareLabel(prefix, kind){
     const sel = kind==='dividido' ? '.'+prefix+'-split-input' : '.'+prefix+'-debt-input';
@@ -2990,14 +3016,11 @@ Object.assign(App,{
   const itemId=document.getElementById('mvItem').value,qty=CasaCore.number(document.getElementById('mvQty').value,'Cantidad',true);
   const cost=type==='compra'?CasaCore.money(document.getElementById('mvCost').value):0;
   CasaCore.number(cost,'Monto');
-  const date=CasaCore.date(document.getElementById('mvDate').value||todayISO()),mem=requireMember();
-  const note=document.getElementById('mvNote').value.trim(),store=document.getElementById('mvStore')?.value.trim()||'';
+  const date=CasaCore.date(document.getElementById('mvDate')?.value||todayISO()),mem=requireMember();
+  const note=document.getElementById('mvNote')?.value.trim()||'',store=document.getElementById('mvStore')?.value.trim()||'';
   if(type==='compra'){await Purchases.create({date,store,note,concept:'Compra de inventario',lines:[{itemId,qty,total:cost}],...readFunding('mv',cost)},operationMeta('inventory-purchase'));closeModal();toast('Compra guardada: gasto, reparto e inventario actualizados');return;}
-  await Data.atomic(operationMeta('inventory-movement'),async t=>{
-   const item=await t.get('items',itemId);if(!item||item.archived)throw Error('Artículo no disponible');
-   await t.put('items',itemId,{currentQty:item.trackingMode==='simple'?Number(item.currentQty||0):CasaCore.quantity(item.currentQty,type==='compra'?qty:-qty),...(item.trackingMode==='simple'&&type==='compra'?{stockStatus:'hay'}:{}),updatedAt:date,...(type==='compra'?{shoppingFlag:false,shoppingFlagBy:null,shoppingFlagAt:null}:{})});
-   await t.put('movements',t.id,{itemId,itemName:item.name,category:item.category,type,qty,inventoryTracked:item.trackingMode!=='simple',unit:item.unit||'',unitCost:cost/qty,total:cost,date,memberId:mem.id,memberName:mem.name,note,store,participantIds:participants()},false);
-  });closeModal();toast('Movimiento registrado');
+  const action=await InventoryService.consume({itemId,qty,date,note,memberId:mem.id},operationMeta('inventory-consumption'));
+  state.inventoryUndo=action;state.inventoryUndoMessage='Usaste '+qty+' '+action.unit+' de '+action.name+'. Quedan '+action.remaining+'.';closeModal();toast('Existencias actualizadas');
  },
  async saveTicket(){
  const date=CasaCore.date(document.getElementById('tkDate').value||todayISO());

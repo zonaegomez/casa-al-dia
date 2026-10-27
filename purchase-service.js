@@ -51,7 +51,7 @@
    const lines=[];
    for(let i=0;i<input.lines.length;i++){
     const l=input.lines[i];C.number(l.qty,'Cantidad',true);let item=null;
-    if(l.itemId){item=await t.get('items',l.itemId);if(!item||item.archived)throw Error('Artículo no disponible');const exact=item.trackingMode!=='simple';await t.put('items',l.itemId,{currentQty:exact?C.quantity(item.currentQty,l.qty):item.currentQty,stockStatus:'hay',shoppingFlag:false,shoppingFlagBy:null,shoppingFlagAt:null,updatedAt:input.date});}
+    if(l.itemId){item=await t.get('items',l.itemId);if(!item||item.archived)throw Error('Artículo no disponible');const exact=item.trackingMode!=='simple';await t.put('items',l.itemId,{currentQty:exact?C.quantity(item.currentQty,l.qty):item.currentQty,stockStatus:'hay',stockActionId:null,shoppingFlag:false,shoppingFlagBy:null,shoppingFlagAt:null,updatedAt:input.date});}
     const itemName=item?item.name:l.itemName;if(!itemName)throw Error('Completa el nombre del producto');
     lines.push({...(allocation.lineShares[i]?{participantIds:allocation.lineShares[i].map(p=>p.memberId),beneficiaryShares:allocation.lineShares[i]}:{}),id:t.id+'-'+i,itemId:l.itemId||null,itemName,category:item?item.category:l.category,unit:item?.unit||'',inventoryTracked:!!item&&item.trackingMode!=='simple',qty:l.qty,total:l.total,type:'compra',store:input.store||'',note:input.note||'',date:input.date});
    }
@@ -95,3 +95,4 @@
  }
  return {create,edit,voidPurchase,plan};
 });
+
