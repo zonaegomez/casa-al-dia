@@ -5,7 +5,7 @@ function app(seed={}){
  const ctx={console:{error(){}},Intl,Date,Math,JSON,Number,Set,Map,Promise,Error,Object,Array,String,RegExp,CasaCore:C,createCasaStore:create,createPurchaseService:require('../purchase-service'),createBillService:require('../bill-service'),crypto:{randomUUID:()=>`uuid-${++seq}`},navigator:{onLine:true},localStorage:{getItem:()=>null,setItem(){},removeItem(){}},document:{addEventListener(){},getElementById:id=>fields[id]||(['main','sidebar','modalRoot','mobileTopbar','mobileNav'].includes(id)?(nodes[id]||(nodes[id]={innerHTML:''})):null),querySelectorAll:()=>[],querySelector:()=>null},confirm:()=>true,setTimeout:()=>{},clearTimeout(){}};
  ctx.window=ctx;ctx.globalThis=ctx;vm.createContext(ctx);
  const html=fs.readFileSync('index.html','utf8');const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).find(s=>s.includes('const firebaseConfig'));
- vm.runInContext(script.replace('boot();\n})();',`render=()=>{};toast=msg=>globalThis.messages.push(msg);globalThis.api={state,allExpenseRows,computeBalances,Data,setAccess(db){state.db=db;accessReady=true;syncReady=true;signedInUser={uid:'test-uid'};},setBillData(raw,payments){rawBills=raw;billPayments=payments;mergeBills();}};\n})();`),ctx);
+ vm.runInContext(script.replace('boot();\n})();',`render=()=>{};toast=msg=>globalThis.messages.push(msg);globalThis.api={state,allExpenseRows,computeBalances,currentMember,Data,setIdentity(id){accountMemberId=id;},setAccess(db){state.db=db;accessReady=true;syncReady=true;signedInUser={uid:'test-uid',email:'qa@example.test'};accountMemberId='a';},setBillData(raw,payments){rawBills=raw;billPayments=payments;mergeBills();}};\n})();`),ctx);
  ctx.messages=messages;ctx.api.setAccess(db);Object.assign(ctx.api.state,{members:[{id:'a',name:'A'},{id:'b',name:'B'}],memberId:'a',items:[{id:'rice',name:'Arroz',category:'despensa',currentQty:10,minQty:0}],settings:{cycleStartDay:1,revision:0,legacyParticipantIds:['a','b']},formOperationId:'form-1'});
  return {ctx,api:ctx.api,App:ctx.App,db,fields,messages};
 }
@@ -29,4 +29,9 @@ test('pagador explícito puede ser distinto de quien registra; sin selección no
  ctx.document.querySelectorAll=s=>s==='.ticket-row'?[{querySelector:key=>({'.tkItem':{value:'rice'},'.tkQty':{value:1},'.tkCost':{value:90}}[key]||null)}]:[];
  await App.saveTicket();assert.equal(db.read('movements/form-1-0'),undefined);assert.match(messages[0],/quién pagó/);
  fields.tkPayer.value='b';await App.saveTicket();assert.equal(db.read('movements/form-1-0').memberId,'b');assert.equal(db.read('items/rice').currentQty,11);
+});
+
+test('la cuenta vinculada define identidad y rechaza un selector antiguo o manipulado',()=>{
+ const {api,App}=app();api.state.memberId='b';assert.equal(api.currentMember().id,'a');assert.equal(App.selectMember,undefined);
+ api.setIdentity('b');assert.equal(api.currentMember().id,'b');api.setIdentity(null);assert.equal(api.currentMember(),null);
 });

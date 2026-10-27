@@ -565,7 +565,7 @@ const MEMBER_COLORS = ['#3E6DF6','#EC4899','#8B5CF6','#0EA5B7','#F59E0B','#22C55
 // Colores de acento para la apariencia de la app (tema personal por dispositivo).
 const THEME_COLORS = ['#6258E8','#3E6DF6','#0EA5B7','#22C55E','#EC4899','#F59E0B'];
 const LOCAL_KEY = 'casa_al_dia_local_v1';
-const MEMBER_KEY = 'casa_al_dia_member_id';
+
 
 /* ---------------- utils ---------------- */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -683,7 +683,6 @@ let state = {
   settings: {householdName:'Mi Casa', currency:'MXN', monthlyBudget:0, budgetByCategory:{}, cycleStartDay:1},
   expandedTicketGroups:{}, expenseScope:'todo',
   page: 'dashboard',
-  memberId: localStorage.getItem(MEMBER_KEY) || null,
   invTab: 'todos',
   invSearch: '',
   gastosCycle: null,
@@ -717,7 +716,7 @@ const Purchases=createPurchaseService({store:Data,C:CasaCore,members:()=>state.m
 const BillService=createBillService({store:Data,C:CasaCore,addMonths,members:()=>state.members});
 function activeMembers(){return state.members.filter(m=>m.active!==false);}
 function participants(){return CasaCore.participants(state.members);}
-function requireMember(){const m=currentMember();if(!m||m.active===false)throw Error('Selecciona un integrante activo antes de registrar');return m;}
+function requireMember(){const m=currentMember();if(!m||m.active===false)throw Error('Tu cuenta necesita estar vinculada a un integrante activo antes de registrar');return m;}
 function operationMeta(kind){return {kind,opId:state.formOperationId||uid()};}
 function renderAccess(){
  document.getElementById('sidebar').innerHTML='';document.getElementById('mobileNav').innerHTML='';document.getElementById('mobileTopbar').innerHTML='';
@@ -731,6 +730,7 @@ function boot(){
  if(typeof firebase==='undefined'){accessMessage='No se pudo cargar Firebase. Revisa tu conexión y vuelve a cargar.';render();return;}
  firebase.initializeApp(firebaseConfig);
  firebase.auth().onAuthStateChanged(async user=>{
+   localStorage.removeItem('casa_al_dia_member_id');
    unsubscribers.forEach(f=>f());unsubscribers=[];if(privateLoanUnsubscribe)privateLoanUnsubscribe();privateLoanUnsubscribe=null;privateLoans=[];privateLoanMessage='';accountMemberId=null;accessReady=false;syncReady=false;signedInUser=user;
    for(const key of ['billReceipts','purchases','members','items','movements','bills','reminders','closedCycles','settlements','debts'])state[key]=[];
    state.settings={householdName:'Mi Casa',currency:'MXN',monthlyBudget:0,budgetByCategory:{},cycleStartDay:1};
@@ -784,7 +784,7 @@ function render(){
 }
 
 function currentMember(){
-  return state.members.find(m=>m.id===state.memberId) || null;
+  return state.members.find(m=>m.id===accountMemberId) || null;
 }
 
 function needsRestock(it){
@@ -873,12 +873,12 @@ function renderSidebar(){
         <div class="brand-sub">Casa al día</div>
       </div>
     </div>
-    <button class="member-switch" onclick="App.openMemberSwitch()">
+    <button class="member-switch" onclick="App.openAccount()">
       ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>`
           : `<span class="avatar" style="background:var(--ink-faint)">?</span>`}
       <span>
-        <div class="label">Registrando como</div>
-        <div class="name">${m?esc(m.name):'Elegir quién soy'}</div>
+        <div class="label">Cuenta activa</div>
+        <div class="name">${m?esc(m.name):'Vinculación pendiente'}</div>
       </span>
       <span class="switch-caret">${icon('chevDown')}</span>
     </button>
@@ -901,10 +901,7 @@ function navItemHtml(n){
   </div>`;
 }
 function renderMobileTopbar(){
-  // En escritorio quien está registrando se elige desde la barra lateral; en celular
-  // esa barra se oculta por completo, así que sin esto no había forma de elegir
-  // (ni de ver) quién eres en el teléfono. Esta barra superior solo se muestra en
-  // mobile (ver CSS @media max-width:760px) y reusa el mismo botón/modal que el de escritorio.
+  // Show the authenticated account on mobile as well as desktop.
   const el = document.getElementById('mobileTopbar');
   if(!el) return;
   const m = currentMember();
@@ -913,12 +910,12 @@ function renderMobileTopbar(){
       <div class="brand-mark">${icon('basket')}</div>
       <div class="brand-name">${esc(state.settings.householdName||'Mi Casa')}</div>
     </div>
-    <button class="member-switch" onclick="App.openMemberSwitch()">
+    <button class="member-switch" onclick="App.openAccount()">
       ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>`
           : `<span class="avatar" style="background:var(--ink-faint)">?</span>`}
       <span>
-        <div class="label">Registrando como</div>
-        <div class="name">${m?esc(m.name):'Elegir quién soy'}</div>
+        <div class="label">Cuenta activa</div>
+        <div class="name">${m?esc(m.name):'Vinculación pendiente'}</div>
       </span>
       <span class="switch-caret">${icon('chevDown')}</span>
     </button>
@@ -988,8 +985,8 @@ function pageDashboard(){
       </section>
       <section class="wallet-card">
         <div class="page-eyebrow">${bal ? 'TU SALDO COMPARTIDO' : 'GASTO DEL CICLO'}</div>
-        <div class="amount">${bal ? fmtMoney(Math.abs(myBalance)) : fmtMoney(stats.total)}</div>
-        <p>${bal ? (myBalance<0?'Te toca aportar':myBalance>0?'Tienes por recibir':'Estás al parejo') : 'Agrega miembros para calcular el reparto'}</p>
+        <div class="amount">${bal ? (me?fmtMoney(Math.abs(myBalance)):'—') : fmtMoney(stats.total)}</div>
+        <p>${bal ? (!me?'Vinculación pendiente':myBalance<0?'Te toca aportar':myBalance>0?'Tienes por recibir':'Estás al parejo') : 'Agrega miembros para calcular el reparto'}</p>
         <div class="wallet-foot">
           <span class="small" style="color:#ffffffa0;">${cap(cycleLabel(cycle))}</span>
           <button class="btn btn-sm" onclick="App.go('cuentas')">Ver cuentas ${icon('chevRight')}</button>
@@ -2026,18 +2023,13 @@ function openModal(html){
 }
 function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
 
-function modalMemberSwitch(){
-  openModal(`
-    <div class="modal-header"><h3>¿Quién eres?</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
-    <div class="modal-body">
-      ${activeMembers().map(m=>`<div class="list-item" style="cursor:pointer" onclick="App.selectMember('${m.id}')">
-        <span class="avatar" style="background:${m.color}">${initials(m.name)}</span>
-        <div class="list-main"><div class="list-title">${esc(m.name)}</div></div>
-        ${state.memberId===m.id?icon('check'):''}
-      </div>`).join('') || '<div class="page-sub">Aún no hay miembros. Agrega el primero.</div>'}
-      <button class="btn" style="margin-top:8px;" onclick="App.closeModal(); App.openMemberForm(null);">${icon('plus')} Agregar miembro</button>
-    </div>
-  `);
+function modalAccount(){
+ const m=currentMember();
+ openModal(`<div class="modal-header"><h3>Mi cuenta</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+ <div class="modal-body"><div class="field"><label>Cuenta activa</label><strong>${m?esc(m.name):'Vinculación pendiente'}</strong></div><p>${esc(signedInUser?.email||'')}</p>
+ <p>${m?'Este es el integrante vinculado a tu acceso. En compras y servicios puedes indicar quién pagó, aunque sea otra persona.':'El administrador debe vincular tu cuenta con un integrante antes de registrar movimientos personales.'}</p>
+ <p>Para entrar con otro integrante, cambia de cuenta e inicia sesión con su correo y contraseña.</p></div>
+ <div class="modal-foot"><button class="btn btn-primary" onclick="App.signOut()">Cambiar de cuenta</button></div>`);
 }
 
 function modalMemberForm(id){
@@ -2471,8 +2463,7 @@ window.App = {
   setThemeAccent(color){ window.casaTheme.accent = color; localStorage.setItem(window.CASA_THEME_KEY, JSON.stringify(window.casaTheme)); window.applyTheme(); render(); },
   setThemeMode(mode){ window.casaTheme.mode = mode; localStorage.setItem(window.CASA_THEME_KEY, JSON.stringify(window.casaTheme)); window.applyTheme(); render(); },
 
-  openMemberSwitch(){ modalMemberSwitch(); },
-  selectMember(id){ state.memberId=id; localStorage.setItem(MEMBER_KEY, id); closeModal(); render(); },
+  openAccount(){ modalAccount(); },
   openMemberForm(id){ modalMemberForm(id); },
   pickColor(el){ document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('sel')); el.classList.add('sel'); },
   async saveMember(id){
@@ -2481,7 +2472,7 @@ window.App = {
     const colorEl = document.querySelector('.swatch.sel');
     const data = { name, color: colorEl?colorEl.dataset.color:MEMBER_COLORS[state.members.length%MEMBER_COLORS.length] };
     if(id){ await Data.set('members', id, data, true); }
-    else { const newId = await Data.add('members', data,operationMeta('save-member')); if(!state.memberId){ state.memberId=newId; localStorage.setItem(MEMBER_KEY,newId);} }
+    else { await Data.add('members', data,operationMeta('save-member')); }
     closeModal(); toast('Miembro guardado'); render();
   },
   openItemForm(id, cat){ modalItemForm(id, cat||INVENTORY_CATS[0]); },
@@ -2843,7 +2834,7 @@ function shareModeSectionHtml(prefix, members, payer){
 
       </select>
     </div>
-    <div class="field" id="${prefix}PayerWrap"><label>¿Quién pagó el dinero?</label><select id="${prefix}Payer"><option value="">Selecciona quién pagó</option>${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select><small>Selecciona al pagador real. No depende de “Registrando como”.</small></div>
+    <div class="field" id="${prefix}PayerWrap"><label>¿Quién pagó el dinero?</label><select id="${prefix}Payer"><option value="">Selecciona quién pagó</option>${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select><small>Selecciona al pagador real, aunque sea otra persona distinta de tu cuenta.</small></div>
     <div id="${prefix}DivididoRows" style="display:none; margin-top:4px;">
       <div class="page-sub" style="margin:4px 0;">Cuánto puso cada uno:</div>
       ${members.map(m=>`<div class="field"><label>${esc(m.name)}</label><input class="${prefix}-split-input" data-member="${m.id}" data-name="${esc(m.name)}" type="number" step="any" min="0" value="0" oninput="App.recalcShareLabel('${prefix}','dividido')"></div>`).join('')}
@@ -2932,7 +2923,7 @@ Object.assign(App,{
  async confirmDeleteMember(id){
   if(!confirm('¿Desactivar este integrante? Su historial se conserva.'))return;
   await Data.set('members',id,{active:false},true);
-  if(state.memberId===id){state.memberId=null;localStorage.removeItem(MEMBER_KEY);}closeModal();toast('Integrante desactivado');
+  closeModal();toast('Integrante desactivado');
  },
  async confirmDeleteItem(id){if(confirm('¿Archivar este artículo? Su historial se conserva.')){await Data.set('items',id,{archived:true},true);closeModal();toast('Artículo archivado');}},
  async confirmDeleteBill(id){if(confirm('¿Archivar este servicio conservando sus pagos?')){await Data.set('bills',id,{archived:true},true);closeModal();toast('Servicio archivado');}},
@@ -3043,9 +3034,9 @@ Object.assign(App,{
 function loanMoney(cents){return fmtMoney(cents/100);}
 function privateLoansBody(){
  const me=signedInUser?.uid;
- if(!accountMemberId)return '<div class="panel"><div class="panel-body">Tu cuenta aún no está vinculada a un integrante. El administrador debe vincularla antes de usar préstamos privados. Cambiar “Registrando como” no crea esa vinculación.</div></div>';
+ if(!accountMemberId)return '<div class="panel"><div class="panel-body">Tu cuenta aún no está vinculada a un integrante. El administrador debe vincularla antes de usar préstamos privados. Cambiar de cuenta requiere iniciar sesión con el acceso correspondiente.</div></div>';
  if(privateLoanMessage)return '<div class="panel"><div class="panel-body">'+esc(privateLoanMessage)+'</div></div>';
- return '<p class="page-sub">Estos préstamos no cambian el saldo compartido ni el inventario. Se consultan con tu cuenta de acceso, aunque cambies “Registrando como”. Visibilidad restringida entre integrantes; la administración técnica de Firebase y sus respaldos conserva acceso.</p>'+ (privateLoans.length?privateLoans.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(l=>{
+ return '<p class="page-sub">Estos préstamos no cambian el saldo compartido ni el inventario. Se consultan únicamente con tu cuenta de acceso. Visibilidad restringida entre integrantes; la administración técnica de Firebase y sus respaldos conserva acceso.</p>'+ (privateLoans.length?privateLoans.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(l=>{
   const lender=l.lenderUid===me,pending=l.payments.find(p=>p.status==='pending'),paid=l.payments.filter(p=>p.status==='confirmed').reduce((s,p)=>s+p.amountCents,0),left=l.amountCents-paid;
   const action=(key,label,paymentId='')=>`<button class="btn btn-sm" onclick="App.privateLoanAction('${l.id}','${key}','${paymentId}')">${label}</button>`;
   return `<div class="panel" style="margin-bottom:12px"><div class="panel-body"><h3>${esc(l.title)}</h3><p>${l.status==='pending'?'Solicitud por confirmar':l.status==='rejected'?'Solicitud rechazada':l.status==='cancelled'?'Solicitud cancelada':l.status==='settled'?'Préstamo liquidado':lender?esc(l.borrowerName)+' te debe':'Le debes a '+esc(l.lenderName)}: <strong>${loanMoney(['pending','rejected','cancelled'].includes(l.status)?l.amountCents:left)}</strong></p><p>${esc(l.lenderName)} → ${esc(l.borrowerName)}</p><p>Préstamo: ${loanMoney(l.amountCents)} · Devuelto y confirmado: ${loanMoney(paid)}</p><p>${({pending:'Pendiente de confirmación de la otra persona. Aún no es deuda confirmada.',active:'Préstamo confirmado',settled:'Liquidado',rejected:'Solicitud rechazada; no genera deuda',cancelled:'Solicitud cancelada; no genera deuda'})[l.status]||''}</p>

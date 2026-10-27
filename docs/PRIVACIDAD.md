@@ -9,12 +9,12 @@ No es cifrado de extremo a extremo. Quienes administran técnicamente el proyect
 ## Activación en staging primero
 
 1. Mantener la configuración web y el service account de Preview apuntando al mismo proyecto de staging. No copiar secretos al repositorio.
-2. Cada integrante debe tener su propia cuenta Firebase Authentication por correo y contraseña. No compartir credenciales; “Registrando como” solo es atribución operativa de movimientos compartidos.
+2. Cada integrante debe tener su propia cuenta Firebase Authentication por correo y contraseña. No compartir credenciales; La interfaz muestra la cuenta activa según este vínculo y permite cerrar sesión para cambiar de cuenta. El pagador de compras y servicios se elige explícitamente en el formulario.
 3. Verificar la identidad humana detrás de cada cuenta y el ID exacto de su documento `members`. No deducirlo por el nombre visible ni por el selector actual.
 4. Habilitar cada cuenta verificada en `access/{UID}` con `enabled: true` y su rol. Agregar `memberId` (string) igual al ID exacto de `members/{id}`. Una cuenta por integrante. Este campo no es modificable desde la app, ni por el administrador de la casa.
 5. Alternativa controlada: con el service account del entorno, ejecutar `node scripts/bind-account.js UID MEMBER_ID` para revisar proyecto y vínculo; repetir con `--apply` una vez verificados. El script no crea usuarios, no habilita accesos y rechaza reasignaciones y vínculos duplicados.
 6. Publicar las reglas de esta rama en STAGING. Desplegar la app/API de esta misma revisión. Recargar sesión después de vincular. Sin vínculo, el módulo permanece bloqueado; si faltan reglas, muestra error sin impedir los módulos compartidos.
-7. Probar con tres sesiones independientes: A y B crean y confirman un préstamo; C, incluso con rol admin de casa, no puede verlo. Cambiar “Registrando como” en C no debe cambiar esta restricción. Probar devolución reportada por deudor y confirmada por acreedor; comprobar que el saldo compartido y stock no cambian.
+7. Probar con tres sesiones independientes: A y B crean y confirman un préstamo; C, incluso con rol admin de casa, no puede verlo. La cuenta activa de C debe mostrar a C; no debe existir un selector para adoptar otra identidad sin iniciar sesión. Probar devolución reportada por deudor y confirmada por acreedor; comprobar que el saldo compartido y stock no cambian.
 8. Producción requiere respaldo probado, migraciones de la guía de activación y verificación del entorno. Este código no publica reglas ni cambia cuentas automáticamente.
 
 Los UID permanecen como participantes históricos. No reciclar una cuenta para otra persona. Un cambio de correo que conserve UID mantiene identidad; para pérdida de cuenta, revocar acceso y revisar una recuperación explícita. No hay reasignación automática de préstamos a otra cuenta ni borrado del historial.
@@ -32,3 +32,8 @@ Los UID permanecen como participantes históricos. No reciclar una cuenta para o
 `debts`, incluidos adelantos vinculados a compras, siguen siendo compartidos. No se migran automáticamente porque no es posible determinar identidades y consentimientos retroactivamente. La interfaz lo indica como “Deudas de compras”. Los nuevos préstamos personales se capturan en el módulo privado; se retira del formulario común la opción de crear adelantos como deuda separada para evitar confundirlos con privacidad.
 
 La privacidad aquí se refiere al nuevo módulo. No convierte en privados tickets, inventario, deudas anteriores, operaciones ni saldos de la casa.
+
+
+## Identidad en la interfaz
+
+Se retiró el selector operativo global. La barra lateral y la cabecera móvil muestran la cuenta vinculada; Mi cuenta ofrece Cambiar de cuenta (cierre de sesión). El inicio y los movimientos personales usan el integrante del acceso autenticado, ignorando cualquier selección antigua guardada en el dispositivo. Crear un integrante no vincula automáticamente la cuenta. Los campos de pagador siguen disponibles y son independientes de la identidad.
