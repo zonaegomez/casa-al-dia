@@ -100,3 +100,17 @@ test('recibo con cuotas y aportaciones parciales funciona con reglas reales sin 
  await assertFails(setDoc(doc(sdk,'billReceipts/bill-1-2026-10-20'),{amount:200}));
  await assertSucceeds(service.edit('bill-1','bill-partial',{voided:true},{opId:'bill-undo'}));
 });
+
+test('consolidación de renta conserva pagos, corrige octubre y no duplica al repetir',async()=>{
+ const {initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore'),assert=require('node:assert/strict');
+ const app=initializeApp({projectId:'demo-casa-al-dia'},'rent-migration-test'),db=getFirestore(app),old=process.env.RENT_MIGRATION_BACKUP_CONFIRMED;
+ try{
+  for(const [i,name,amount]of [['a','Erick',6000],['b','Axel',5500],['c','Marbet',7000]]){await db.doc('members/'+i).set({name});await db.doc('bills/rent-'+i).set({name:'Renta '+name,cycle:'mensual',amountEstimate:amount,nextDueDate:'2026-11-15',history:[{amount,memberId:i,memberName:name,paidAt:'2026-10-15',period:name==='Marbet'?'2026-11':'2026-10'}]});}
+  const migrate=require('../scripts/consolidate-rent');await migrate(db,false);assert.equal((await db.doc('bills/rent-unified').get()).exists,false);
+  process.env.RENT_MIGRATION_BACKUP_CONFIRMED='yes';await migrate(db,true);await migrate(db,true);
+  assert.equal((await db.doc('billReceipts/rent-unified-2026-10-15').get()).data().amount,18500);
+  assert.equal((await db.doc('billPayments/rent-oct2026-2').get()).data().period,'2026-10');
+  assert.equal((await db.doc('bills/rent-c').get()).data().history.length,0);
+  assert.equal((await db.doc('operations/consolidate-rent-oct2026').get()).data().originalBills.length,3);
+ }finally{if(old===undefined)delete process.env.RENT_MIGRATION_BACKUP_CONFIRMED;else process.env.RENT_MIGRATION_BACKUP_CONFIRMED=old;await app.delete();}
+});

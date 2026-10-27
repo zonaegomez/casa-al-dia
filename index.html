@@ -2310,9 +2310,12 @@ function modalBillHistory(billId){
   const b = state.bills.find(x=>x.id===billId);
   if(!b) return;
   const entries = (b.history||[]).map((h,i)=>Object.assign({_idx:i}, h)).sort((x,y)=>(y.paidAt||'').localeCompare(x.paidAt||''));
+  const receipts=state.billReceipts.filter(r=>r.billId===billId).slice().sort((a,b)=>b.dueDate.localeCompare(a.dueDate));
   openModal(`
-    <div class="modal-header"><h3>Historial de pagos · ${esc(b.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-header"><h3>Recibos y aportaciones · ${esc(b.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body" style="padding:0;">
+      ${receipts.map(r=>{const progress=CasaCore.receiptProgress(r,billPayments);return '<div style="padding:16px;border-bottom:1px solid var(--border)"><strong>Recibo '+esc(r.period)+' · '+fmtMoney(r.amount)+'</strong><p>Vence '+fmtDate(r.dueDate)+' · pendiente '+fmtMoney(progress.pending)+'</p>'+progress.members.map(p=>'<div>'+esc(state.members.find(m=>m.id===p.memberId)?.name||'Integrante')+': cuota '+fmtMoney(p.owed)+' · aportación directa '+fmtMoney(p.paid)+' ('+Math.round(p.percent)+'%)'+(p.credit?' · adelanto '+fmtMoney(p.credit):'')+'</div>').join('')+'</div>';}).join('')}
+      <p class="page-sub" style="padding:12px">Las aportaciones son pagos efectivos al servicio. Los reembolsos entre personas se registran en Cuentas y reducen el saldo acumulado.</p>
       ${entries.length ? entries.map(h=>`<div class="list-item">
         <div class="list-icon">${icon('cash')}</div>
         <div class="list-main"><div class="list-title">${fmtMoney(Number(h.amount)||0)}</div><div class="list-sub">${fmtDate(h.paidAt)} · ${Array.isArray(h.splits)&&h.splits.length ? 'Dividido: '+h.splits.map(s=>`${esc(s.memberName)} ${fmtMoney(Number(s.amount)||0)}`).join(' · ') : esc(h.memberName||'—')}</div></div>
