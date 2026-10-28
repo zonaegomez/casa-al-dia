@@ -33,8 +33,10 @@ function parseResult(text){
   return {lines,total,date,store,needsReview:true,lineTotal:lineCents/100,difference,discountsApplied,warnings:[...new Set(warnings)]};
 }
 function sameProducts(a,b){
-  const clean=lines=>lines.map(l=>l.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim()).filter(n=>! /^(rebaja|descuento)\b/.test(n)).sort();
-  return JSON.stringify(clean(a.lines))===JSON.stringify(clean(b.lines));
+  const clean=lines=>lines.map(l=>l.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(rebaja|descuento)\b.*/,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+  const left=clean(a.lines),right=clean(b.lines);if(left.length!==right.length)return false;
+  const similarity=(x,y)=>{if(x===y)return 1;const prev=Array.from({length:y.length+1},(_,i)=>i);for(let i=1;i<=x.length;i++){let diagonal=prev[0];prev[0]=i;for(let j=1;j<=y.length;j++){const above=prev[j];prev[j]=Math.min(prev[j]+1,prev[j-1]+1,diagonal+(x[i-1]===y[j-1]?0:1));diagonal=above;}}return 1-prev[y.length]/Math.max(x.length,y.length,1);};
+  return left.every((name,i)=>similarity(name,right[i])>=0.72);
 }
 async function readWithModel(imageBase64,mediaType,prompt,timeoutMs){
   const upstream=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:AbortSignal.timeout(timeoutMs),headers:{'content-type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:process.env.ANTHROPIC_MODEL||'claude-haiku-4-5-20251001',max_tokens:3500,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mediaType,data:imageBase64}},{type:'text',text:prompt}]}]})});
