@@ -1783,6 +1783,7 @@ function financePlansBody(){
  const externalAmount=i=>p.rows.reduce((s,r)=>s+r.equipment[i],0);
  return `<div class="card" style="padding:20px"><h2>Mi plan de pagos · ${esc(name(accountMemberId))}</h2>
  <label>Mes <input type="month" value="${esc(period)}" onchange="App.setFinanceMonth(this.value)"></label>
+ ${p.entryDescription?`<p><strong>${esc(labels.entry)} incluye:</strong> ${esc(p.entryDescription)}</p>`:''}
  <p>${p.dates.length} cuota(s) mensuales, del ${fmtDate(p.dates[0])} al ${fmtDate(last)}. Responsable del adelanto: ${esc(name(p.creditorId))}.</p>
  ${row.rent?`<p>Gasto fijo mensual de referencia: <strong>${fmtMoney(row.rent)}</strong>. Sus recibos y pagos se registran en Servicios; no se marcan pagados desde este plan.</p>`:''}
  ${index>=0?`<p>Aportación prevista: <strong>${fmtMoney(row.rent+own('entry')+own('equipment'))}</strong>${row.rent?' (incluye la referencia mensual)':''}. Otros gastos de la casa se suman aparte.</p>`:period>last.slice(0,7)?'<p>El calendario terminó. Cualquier saldo sin pagar sigue pendiente.</p>':'<p>El plan todavía no comienza en el mes seleccionado.</p>'}
@@ -1803,27 +1804,30 @@ function openFinanceSetup(){
  if(accountRole!=='admin')throw Error('Solo el administrador crea el plan');
  if(state.settings.financePlan)throw Error('Ya hay un plan de pagos registrado');
  const members=activeMembers();
- openModal(`<div class="modal-header"><h3>Crear plan de pagos</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body">
+ openModal(`<div class="modal-header"><h3>Crear plan de pagos</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body" oninput="App.refreshFinanceSetup()" onchange="App.refreshFinanceSetup()">
  <p>Usa este plan cuando alguien adelantó dinero o cuando comparten una compra a plazos. Es un registro compartido de la casa.</p>
  <div class="field"><label>¿Quién adelantó el dinero o administra el crédito?</label><select id="fpCreditor">${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></div>
  <div class="field"><label>Fecha de la primera cuota</label><input type="date" id="fpStart"></div>
  <div class="field"><label>Número de cuotas mensuales</label><input id="fpCount" type="number" min="1" max="60" step="1" value="6"></div>
  <p>Si la fecha cae en un día que no existe en otro mes, esa cuota vence el último día de ese mes.</p>
- <fieldset class="field"><legend>Dinero que hay que devolver (opcional)</legend>
+ <fieldset class="field"><legend>Concepto 1 · Dinero que hay que devolver (opcional)</legend>
  <label>Nombre del concepto<input id="fpEntryLabel" maxlength="80" placeholder="Ej. Adelanto de mudanza"></label>
- <small>Abajo indica la parte original de cada persona. La parte propia de quien adelantó no genera una deuda consigo mismo. Si no aplica, usa cero.</small></fieldset>
- <fieldset class="field"><legend>Compra financiada sin intereses (opcional)</legend>
+ <label>¿Qué incluye este concepto? (opcional)<textarea id="fpEntryDetail" maxlength="500" placeholder="Ej. Primer mes de renta, depósito y póliza jurídica"></textarea></label><small>Abajo indica la parte original de cada persona. La parte propia de quien adelantó no genera una deuda consigo mismo. Si no aplica, usa cero.</small></fieldset>
+ <fieldset class="field"><legend>Concepto 2 · Compra financiada sin intereses (opcional)</legend>
  <label>Nombre del concepto<input id="fpEquipmentLabel" maxlength="80" placeholder="Ej. Refrigerador"></label>
  <label>Total de la compra<input id="fpEquipment" type="number" min="0" step="0.01" value="0"></label>
  <label>Cuota mensual por persona (opcional)<input id="fpMonthly" type="number" min="0" step="0.01" placeholder="Se calcula si lo dejas vacío"></label>
  <small>Se reparte en partes iguales entre quienes participan. La última cuota ajusta los centavos. Si existe un crédito, su pago externo se registra por separado.</small></fieldset>
- <h3>¿Quiénes participan?</h3>
- ${members.map((m,i)=>`<fieldset class="field fp-row"><legend><label><input type="checkbox" class="fp-include" checked> Incluir a ${esc(m.name)}</label></legend><input type="hidden" class="fp-member" value="${m.id}">
- <label>Parte original de dinero adelantado<input class="fp-entry" type="number" min="0" step="0.01" value="0"></label>
- <label>Gasto fijo mensual de referencia (opcional)<input class="fp-rent" type="number" min="0" step="0.01" value="0"></label>
+ <h3>Reparto de ambos conceptos</h3><p>Selecciona quién participa en el plan. Cada tarjeta muestra por separado su parte del concepto 1 y del concepto 2. La referencia mensual va aparte.</p>
+ ${members.map((m,i)=>`<fieldset class="field fp-row"><legend><label><input type="checkbox" class="fp-include" checked> ${esc(m.name)} · participa en el plan</label></legend><input type="hidden" class="fp-member" value="${m.id}">
+ <div style="border-bottom:1px solid var(--border);padding:10px 0"><strong>Concepto 1 · <span class="fp-entry-caption">Dinero por devolver</span></strong><label style="display:block">Parte original que le corresponde<input class="fp-entry" type="number" min="0" step="0.01" value="0"></label><small class="fp-entry-note"></small></div>
+ <div style="border-bottom:1px solid var(--border);padding:10px 0"><strong>Concepto 2 · <span class="fp-equipment-caption">Compra financiada</span></strong><p>Su parte del total: <strong class="fp-equipment-share">—</strong></p><small>Se calcula con el total de la compra y las personas seleccionadas.</small></div>
+ <label>Referencia mensual adicional, fuera de los dos conceptos (opcional)<input class="fp-rent" type="number" min="0" step="0.01" value="0"></label>
  <small>Por ejemplo, su parte de renta. Es una referencia para planear; no crea otro recibo ni confirma su pago.</small></fieldset>`).join('')}
+ <div id="fpAllocationSummary" role="status" aria-live="polite"></div>
  <label><input type="checkbox" id="fpFirstPaid"> Todas las personas participantes ya cubrieron su primera cuota. Esto no confirma ningún pago externo.</label>
  <p>Revisa los importes antes de guardar. Este formulario no borra registros anteriores ni crea gastos nuevos.</p><button class="btn btn-primary" onclick="App.saveFinanceSetup()">Revisar y guardar plan</button></div>`);
+ App.refreshFinanceSetup();
 }
 
 /* ---------------- Deudas internas (viven dentro de "Cuentas") ---------------- */
@@ -3033,9 +3037,25 @@ function readFunding(prefix,total){
 Object.assign(App,{
  setFinanceMonth(value){if(!/^\d{4}-\d{2}$/.test(value))return;state.financeMonth=value;render();},
  openFinanceSetup,
+ refreshFinanceSetup(){
+  const label=document.getElementById('fpEntryLabel');if(!label)return;
+  const entryLabel=label.value.trim()||'Dinero por devolver',equipmentLabel=document.getElementById('fpEquipmentLabel').value.trim()||'Compra financiada';
+  document.querySelectorAll('.fp-entry-caption').forEach(el=>el.textContent=entryLabel);
+  document.querySelectorAll('.fp-equipment-caption').forEach(el=>el.textContent=equipmentLabel);
+  const rows=[...document.querySelectorAll('.fp-row')],selected=rows.filter(el=>el.querySelector('.fp-include').checked),creditor=document.getElementById('fpCreditor').value;
+  let total=0;try{total=CasaCore.cents(document.getElementById('fpEquipment').value||0);}catch(e){}
+  const each=selected.length?Math.floor(total/selected.length):0;
+  rows.forEach(el=>{
+   const id=el.querySelector('.fp-member').value,included=el.querySelector('.fp-include').checked;
+   el.querySelector('.fp-entry-note').textContent=!included?'No participa en este plan.':id===creditor?'Es su aportación propia; no genera una deuda consigo mismo.':'Este importe se devuelve a quien adelantó el dinero. Usa cero si no le corresponde.';
+   el.querySelector('.fp-equipment-share').textContent=!included?'No participa':!total?'Sin compra financiada':fmtMoney((each+(id===creditor?total-each*selected.length:0))/100);
+  });
+  let entry=0;for(const el of selected){try{entry+=CasaCore.cents(el.querySelector('.fp-entry').value||0);}catch(e){}}
+  const summary=document.getElementById('fpAllocationSummary');if(summary)summary.textContent='Concepto 1 · '+entryLabel+': aportaciones originales '+fmtMoney(entry/100)+'. Concepto 2 · '+equipmentLabel+': total de compra '+fmtMoney(total/100)+'. La referencia mensual no forma parte de estos importes.';
+ },
  async saveFinanceSetup(){
   if(accountRole!=='admin')throw Error('Solo el administrador configura el plan');
-  const input={installmentCount:Number(document.getElementById('fpCount').value),entryLabel:document.getElementById('fpEntryLabel').value,equipmentLabel:document.getElementById('fpEquipmentLabel').value,creditorId:document.getElementById('fpCreditor').value,startDate:document.getElementById('fpStart').value,equipmentTotal:Number(document.getElementById('fpEquipment').value),equipmentMonthly:Number(document.getElementById('fpMonthly').value),firstPaid:document.getElementById('fpFirstPaid').checked,rows:[...document.querySelectorAll('.fp-row')].filter(el=>el.querySelector('.fp-include').checked).map(el=>({memberId:el.querySelector('.fp-member').value,entryTotal:Number(el.querySelector('.fp-entry').value),rent:Number(el.querySelector('.fp-rent').value)}))};
+  const input={entryDescription:document.getElementById('fpEntryDetail')?.value||'',installmentCount:Number(document.getElementById('fpCount').value),entryLabel:document.getElementById('fpEntryLabel').value,equipmentLabel:document.getElementById('fpEquipmentLabel').value,creditorId:document.getElementById('fpCreditor').value,startDate:document.getElementById('fpStart').value,equipmentTotal:Number(document.getElementById('fpEquipment').value),equipmentMonthly:Number(document.getElementById('fpMonthly').value),firstPaid:document.getElementById('fpFirstPaid').checked,rows:[...document.querySelectorAll('.fp-row')].filter(el=>el.querySelector('.fp-include').checked).map(el=>({memberId:el.querySelector('.fp-member').value,entryTotal:Number(el.querySelector('.fp-entry').value),rent:Number(el.querySelector('.fp-rent').value)}))};
   const plan=CasaFinance.create(input,state.members),name=id=>state.members.find(m=>m.id===id)?.name||'Integrante';
   if(input.firstPaid&&input.startDate>todayISO())throw Error('No marques pagada una cuota futura');
   if(!confirm('Guardar plan de '+plan.dates.length+' cuotas desde '+fmtDate(plan.dates[0])+' hasta '+fmtDate(plan.dates.at(-1))+'\n'+plan.rows.map(r=>name(r.memberId)+': '+plan.entryLabel+' '+fmtMoney(r.entry.reduce((s,n)=>s+n,0))+'; '+plan.equipmentLabel+' '+fmtMoney(r.equipment.reduce((s,n)=>s+n,0))).join('\n')+'\nPrimera cuota entre integrantes: '+(input.firstPaid?'pagada':'pendiente')+'\nLos pagos externos quedan pendientes de confirmar. ¿Guardar?'))return;

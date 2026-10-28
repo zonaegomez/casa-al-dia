@@ -14,7 +14,8 @@
   if(!equipment&&!rows.some(r=>r.entry.some(n=>n>0)))throw Error('Captura al menos un saldo por devolver o una compra financiada');
   const dates=Array.from({length:count},(_,i)=>{const [y,m,day]=input.startDate.split('-').map(Number),last=new Date(Date.UTC(y,m+i,0)).getUTCDate(),d=new Date(Date.UTC(y,m-1+i,Math.min(day,last)));return d.toISOString().slice(0,10);});
   const payments=input.firstPaid?rows.flatMap(r=>['entry','equipment'].filter(k=>r[k][0]>0).map(kind=>({id:'opening-'+r.memberId+'-'+kind,memberId:r.memberId,kind,index:0,amount:r[kind][0],date:dates[0],opening:true}))):[];
-  return {version:2,entryLabel:label(input.entryLabel,'Saldo por devolver'),equipmentLabel:label(input.equipmentLabel,'Compra financiada'),creditorId:input.creditorId,dates,rows,equipmentTotal:input.equipmentTotal,payments,providerPayments:[]};
+  if(input.entryDescription!=null&&(typeof input.entryDescription!=='string'||input.entryDescription.length>500))throw Error('Describe el concepto en hasta 500 caracteres');
+  return {version:2,entryDescription:(input.entryDescription||'').trim(),entryLabel:label(input.entryLabel,'Saldo por devolver'),equipmentLabel:label(input.equipmentLabel,'Compra financiada'),creditorId:input.creditorId,dates,rows,equipmentTotal:input.equipmentTotal,payments,providerPayments:[]};
  }
  function paid(plan,id,kind,index){return plan.payments.filter(p=>!p.voided&&p.memberId===id&&p.kind===kind&&p.index===index).reduce((s,p)=>s+cents(p.amount),0)/100;}
  function remaining(plan,row,kind){return Math.max(0,row[kind].reduce((s,n)=>s+cents(n),0)-plan.payments.filter(p=>!p.voided&&p.memberId===row.memberId&&p.kind===kind).reduce((s,p)=>s+cents(p.amount),0))/100;}

@@ -91,6 +91,14 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   assert.ok(await page.locator('#fpStart').isVisible());assert.equal(await page.locator('.fp-row').count(),3);
   assert.ok(await page.locator('#fpCount').isVisible());assert.ok(await page.locator('#fpEntryLabel').isVisible());assert.ok(await page.locator('#fpEquipmentLabel').isVisible());assert.equal(await page.locator('.fp-include').count(),3);
   assert.ok(!(await page.locator('#modalRoot').innerText()).includes('Lavadora y secadora'));
+  await page.locator('#fpEntryLabel').fill('Mudanza compartida');await page.locator('#fpEntryDetail').fill('Depósito y trámites');await page.locator('#fpEquipmentLabel').fill('Muebles');await page.locator('#fpCreditor').selectOption('c');await page.locator('#fpEquipment').fill('600.01');
+  assert.equal(await page.locator('.fp-entry-caption').first().innerText(),'Mudanza compartida');assert.equal(await page.locator('.fp-equipment-caption').first().innerText(),'Muebles');
+  assert.deepEqual(await page.locator('.fp-equipment-share').allTextContents(),['$200.00','$200.00','$200.01']);
+  await page.locator('.fp-entry').nth(0).fill('1000');await page.locator('.fp-entry').nth(1).fill('1100');await page.locator('.fp-entry').nth(2).fill('1200');
+  assert.ok((await page.locator('#fpAllocationSummary').innerText()).includes('$3,300.00'));
+  assert.ok((await page.locator('.fp-entry-note').nth(2).innerText()).includes('aportación propia'));
+  await page.locator('.fp-include').nth(1).uncheck();assert.deepEqual(await page.locator('.fp-equipment-share').allTextContents(),['$300.00','No participa','$300.01']);await page.locator('.fp-include').nth(1).check();
+
   await page.evaluate(()=>{const q=window.__qa;App.closeModal();q.state.settings={...q.state.settings,financePlan:CasaFinance.create({creditorId:'c',startDate:'2026-10-15',equipmentTotal:600.01,equipmentMonthly:33.33,firstPaid:true,rows:[{memberId:'a',entryTotal:1000,rent:300},{memberId:'b',entryTotal:1100,rent:350},{memberId:'c',entryTotal:1200,rent:400}]},q.state.members)};App.setFinanceMonth('2026-10');});
   assert.ok((await page.locator('#main').innerText()).includes('Mi plan de pagos · Persona A'));
   assert.ok((await page.locator('#main').innerText()).includes('$833.33'));
