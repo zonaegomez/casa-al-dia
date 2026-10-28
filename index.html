@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 62464)
+Total output lines: 3317
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -499,6 +502,7 @@ window.CASA_THEME_KEY = 'casa-theme-v1';
 <script src="purchase-service.js"></script>
 <script src="bill-service.js"></script>
 <script src="inventory-service.js"></script>
+<script src="finance-plans.js"></script>
 <script>
 /* ============================================================
    CASA AL DÍA — ERP doméstico
@@ -713,6 +717,7 @@ function saveLocalSnapshot(){
 }
 
 /* ---------------- data access layer (works live or local) ---------------- */
+let accountRole=null;
 let accountMemberId=null, privateLoans=[], privateLoanMessage='', privateLoanUnsubscribe=null;
 let signedInUser=null, accessReady=false, syncReady=false, accessMessage='', unsubscribers=[];
 let rawBills=[], billPayments=[], loadingCollections=new Set();
@@ -737,7 +742,7 @@ function boot(){
  firebase.initializeApp(firebaseConfig);
  firebase.auth().onAuthStateChanged(async user=>{
    localStorage.removeItem('casa_al_dia_member_id');
-   unsubscribers.forEach(f=>f());unsubscribers=[];if(privateLoanUnsubscribe)privateLoanUnsubscribe();privateLoanUnsubscribe=null;privateLoans=[];privateLoanMessage='';accountMemberId=null;state.inventoryUndo=null;accessReady=false;syncReady=false;signedInUser=user;
+   unsubscribers.forEach(f=>f());unsubscribers=[];if(privateLoanUnsubscribe)privateLoanUnsubscribe();privateLoanUnsubscribe=null;privateLoans=[];privateLoanMessage='';accountMemberId=null;accountRole=null;state.inventoryUndo=null;accessReady=false;syncReady=false;signedInUser=user;
    for(const key of ['billReceipts','purchases','members','items','movements','bills','reminders','closedCycles','settlements','debts'])state[key]=[];
    state.settings={householdName:'Mi Casa',currency:'MXN',monthlyBudget:0,budgetByCategory:{},cycleStartDay:1};
    rawBills=[];billPayments=[];closeModal();render();
@@ -748,7 +753,7 @@ function boot(){
      const access=await state.db.doc('access/'+user.uid).get({source:'server'});
      if(signedInUser?.uid!==user.uid)return;
      if(!access.exists||access.data().enabled!==true)throw Error('Tu cuenta no está autorizada. Comparte tu UID con quien administra la casa.');
-     accountMemberId=access.data().memberId||null;accessReady=true;accessMessage='Sincronizando todos los módulos…';subscribeAll();subscribePrivateLoans();
+     accountMemberId=access.data().memberId||null;accountRole=access.data().role||'member';accessReady=true;accessMessage='Sincronizando todos los módulos…';subscribeAll();subscribePrivateLoans();
    }catch(e){accessMessage=e.message;render();}
  });
  window.addEventListener('offline',()=>{privateLoans=[];privateLoanMessage='Sin conexión: los préstamos privados no están disponibles.';syncReady=false;accessMessage='Sin conexión. Recarga cuando vuelva internet; no se guardarán cambios locales aislados.';closeModal();render();});
@@ -1717,7 +1722,7 @@ function pageCuentas(){
   const gran = state.gastosGranularity || 'mensual';
   const keys = allPeriodKeys(gran).reverse();
   const activeCycle = (state.gastosCycle && keys.includes(state.gastosCycle)) ? state.gastosCycle : keys[0];
-  const tab = state.cuentasTab==='saldos' ? 'saldos' : state.cuentasTab==='deudas' ? 'deudas' : state.cuentasTab==='prestamos' ? 'prestamos' : 'gastos';
+  const tab = state.cuentasTab==='plan' ? 'plan' : state.cuentasTab==='saldos' ? 'saldos' : state.cuentasTab==='deudas' ? 'deudas' : state.cuentasTab==='prestamos' ? 'prestamos' : 'gastos';
   const scope=state.expenseScope||'todo';
   const rows = allExpenseRows().filter(r=>periodKeyFor(r.date, gran)===activeCycle);
   const shownRows=rows.filter(r=>scope==='fijos'?r.source==='bill':scope==='variables'?r.source==='movement':true);
@@ -1726,8 +1731,9 @@ function pageCuentas(){
   // NO son un gasto de la casa: es dinero que ya se había gastado antes y solo se está
   // regresando entre ustedes, así que no tienen ciclo ni cuentan en "Gastos" ni en el saldo.
   const activeDebts = state.debts.filter(d=>!d.archived&&!isDebtSettled(d));
-  const titleByTab = {gastos:'Gastos', saldos:'Saldo entre integrantes', deudas:'Deudas de compras', prestamos:'Préstamos privados'};
+  const titleByTab = {plan:'Mi plan de pagos', gastos:'Gastos', saldos:'Saldo entre integrantes', deudas:'Deudas de compras', prestamos:'Préstamos privados'};
   const subByTab = {
+    plan:'Renta de referencia, adelantos de entrada y equipo a seis cuotas.',
     gastos: rows.length+' movimiento(s) · total '+fmtMoney(total),
     saldos: 'Saldo acumulado de compras y servicios; los pagos al proveedor pendientes se consultan en Servicios',
     prestamos:'Solo participan las dos cuentas involucradas. No se suma a los gastos de la casa.',
@@ -1755,98 +1761,29 @@ function pageCuentas(){
       </div>
     </div>
     <div class="tabs" style="margin-bottom:10px;">
+      <div class="tab ${tab==='plan'?'active':''}" onclick="App.setCuentasTab('plan')">Mi plan de pagos</div>
       <div class="tab ${tab==='gastos'?'active':''}" onclick="App.setCuentasTab('gastos')">Gastos</div>
       <div class="tab ${tab==='saldos'?'active':''}" onclick="App.setCuentasTab('saldos')">Saldo entre integrantes</div>
       <div class="tab ${tab==='deudas'?'active':''}" onclick="App.setCuentasTab('deudas')">Deudas de compras</div>
       <div class="tab ${tab==='prestamos'?'active':''}" onclick="App.setCuentasTab('prestamos')">Préstamos privados</div>
     </div>
     ${tab==='gastos'?`<div class="tabs"><button class="btn" onclick="App.setExpenseScope('todo')">Todo</button><button class="btn" onclick="App.setExpenseScope('fijos')">Servicios</button><button class="btn" onclick="App.setExpenseScope('variables')">Compras y otros</button></div><p class="page-sub">Filtro de gastos: ${scope==='todo'?'todos':scope==='fijos'?'servicios':'compras y otros'}. No modifica el saldo acumulado.</p>`:''}
-    ${tab==='gastos' ? gastosBody(shownRows, total) : tab==='saldos' ? saldosBody(activeCycle, gran) : tab==='prestamos' ? privateLoansBody() : deudasBody()}
+    ${tab==='plan' ? financePlansBody() : tab==='gastos' ? gastosBody(shownRows, total) : tab==='saldos' ? saldosBody(activeCycle, gran) : tab==='prestamos' ? privateLoansBody() : deudasBody()}
   `;
 }
 
-/* ---------------- Deudas internas (viven dentro de "Cuentas") ---------------- */
-function debtPaidTotal(d){ return (d.payments||[]).reduce((s,p)=>s+(Number(p.amount)||0), 0); }
-function isDebtSettled(d){ return CasaCore.cents(debtPaidTotal(d)) >= CasaCore.cents(d.totalAmount||0); }
-function debtRowHtml(d){
-  const paid = debtPaidTotal(d);
-  const total = Number(d.totalAmount)||0;
-  const remaining = Math.max(0, total-paid);
-  const pct = total>0 ? Math.min(100, paid/total*100) : 0;
-  const settled = isDebtSettled(d);
-  const content = `
-    <div class="${settled?'':'swipe-content '}list-item">
-      <div class="list-icon" style="${settled?'background:var(--good-soft);color:var(--good);':''}">${icon(settled?'check':'wallet')}</div>
-      <div class="list-main">
-        <div class="list-title">${esc(d.name)}${settled?' <span class="badge badge-good" style="margin-left:6px;">Saldada</span>':''}</div>
-        <div class="list-sub">${esc(d.fromName||'—')} le debe a ${esc(d.toName||'—')} · ${settled?'cubierto por completo':fmtMoney(remaining)+' por cubrir'}</div>
-        <div class="progress" style="margin-top:7px; max-width:260px;"><span style="width:${pct}%; ${settled?'background:var(--good);':''}"></span></div>
-      </div>
-      <div class="list-end" style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-        <span style="font-weight:700;">${fmtMoney(paid)} <span style="font-weight:400;color:var(--ink-faint);font-size:11px;">de ${fmtMoney(total)}</span></span>
-        <div style="display:flex; gap:4px;">
-          <button class="btn btn-sm btn-ghost" onclick="App.openDebtHistory('${d.id}')" title="Ver abonos">${icon('chart')}</button>
-          <button class="btn btn-sm btn-ghost" onclick="App.openDebtForm('${d.id}')" title="Editar">${icon('edit')}</button>
-          <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteDebt('${d.id}')" title="Eliminar">${icon('trash')}</button>
-        </div>
-      </div>
-    </div>`;
-  if(settled) return content; // ya saldada: no hay nada que abonar, así que no lleva swipe
-  return `<div class="swipe-row">
-    <div class="swipe-action swipe-action-left" onclick="App.confirmDeleteDebt('${d.id}')">${icon('trash')}<span>Eliminar</span></div>
-    <div class="swipe-action swipe-action-right" onclick="App.openDebtPayment('${d.id}')">${icon('plus')}<span>Abonar</span></div>
-    ${content}
-  </div>`;
-}
-function deudasBody(){
-  const all = state.debts.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
-  const active = all.filter(d=>!isDebtSettled(d));
-  const settled = all.filter(d=>isDebtSettled(d));
-  return `
-    <div class="panel">
-      <p class="page-sub">Estas deudas anteriores y adelantos de compras son visibles para toda la casa. Para nuevos préstamos personales usa Préstamos privados.</p><div class="panel-body pad0">
-        ${active.length ? `<div class="swipe-list">${active.map(debtRowHtml).join('')}</div>` : emptyBlock('wallet', 'No hay deudas internas activas. Agrega la primera con "Nueva deuda".')}
-      </div>
-    </div>
-    ${settled.length ? `<div class="panel" style="margin-top:14px; opacity:.75;">
-      <div class="panel-header"><div class="panel-title">Saldadas</div></div>
-      <div class="panel-body pad0"><div class="swipe-list">${settled.map(debtRowHtml).join('')}</div></div>
-    </div>` : ''}
-  `;
-}
-
-/* ---------------- PAGE: recordatorios ---------------- */
-function pageRecordatorios(){
-  const manual = state.reminders.slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
-  const autoBills = dueSoonBills(60).map(b=>({title:'Pagar '+b.name, dueDate:b.nextDueDate, auto:true, kind:'bill', ref:b}));
-  const autoStock = lowStockItems().map(it=>({title:'Reponer '+it.name, dueDate:todayISO(), auto:true, kind:'stock', ref:it}));
-  const all = [...manual.map(r=>({...r, auto:false})), ...autoBills, ...autoStock];
-
-  // Agrupamos por mes calendario real (no por "próximos 31 días"), para que un
-  // pendiente de inicios del siguiente mes no aparezca bajo el encabezado
-  // "Este mes" mientras todavía estamos en el mes anterior.
-  const todayDt = new Date(todayISO()+'T00:00:00');
-  const curY = todayDt.getFullYear(), curM = todayDt.getMonth();
-  const weekEndDt = new Date(todayDt); weekEndDt.setDate(weekEndDt.getDate()+7);
-  const weekEndIso = weekEndDt.toISOString().slice(0,10);
-  const monthEndDt = new Date(curY, curM+1, 0);
-  const monthEndIso = monthEndDt.toISOString().slice(0,10);
-
-  const groups = {vencidos:[], hoy:[], semana:[], mes:[], futuro:[]};
-  all.forEach(r=>{
-    if(r.done){ return; }
-    const dueIso = r.dueDate||todayISO();
-    const d = daysBetween(todayISO(), dueIso);
-    const dueDt = new Date(dueIso+'T00:00:00');
-    const sameMonth = dueDt.getFullYear()===curY && dueDt.getMonth()===curM;
-    if(d<0) groups.vencidos.push(r);
-    else if(d===0) groups.hoy.push(r);
-    else if(d<=7) groups.semana.push(r);
-    else if(sameMonth) groups.mes.push(r);
-    else groups.futuro.push(r);
-  });
-  const done = manual.filter(r=>r.done);
-  const sec = (title,arr)=> arr.length? `<div class="panel" style="margin-bottom:12px;">
+/* Opening finance plans are household records, not private personal finances. */
+function financePlansBody(){
+ const p=state.settings.financePlan,name=id=>state.members.find(m=>m.id===id)?.name||'Integrante';
+ if(!p)return '<div class="card" style="padding:20px"><h2>Mi plan de pagos</h2><p>Separa los adelantos de entrada y el equipo de los gastos diarios. Los abonos no vuelven a sumar como gasto.</p><p>Los planes de la casa son compartidos. Los préstamos privados permanecen en su propia sección.</p>'+(accountRole==='admin'?'<button class="btn btn-primary" onclick="App.openFinanceSetup()">Configurar saldos iniciales</button>':'<p>El administrador debe configurar los saldos iniciales.</p>')+'</div>';
+ if(!accountMemberId)return emptyBlock('wallet','Tu cuenta debe estar vinculada a un integrante.');
+ const row=p.rows.find(r=>r.memberId===accountMemberId);if(!row)return emptyBlock('wallet','No tienes cuotas en este plan.');
+ const period=(state.financeMonth||todayISO().slice(0,7)),index=p.dates.findIndex(d=>d.slice(0,7)===period);
+ const own=kind=>index<0?0:row[kind][index],paid=kind=>index<0?0:CasaFinance.paid(p,row.memberId,kind,index);
+ const creditor=p.creditorId===accountMemberId;
+ const before=period<p.dates[0].slice(0,7),after=period>p.dates[5].slice(0,7);
+ return '<div class="card" style="padding:20px"><h2>Mi plan de pagos · '+esc(name(accountMemberId))+'</h2><label>Mes <input type="month" value="'+esc(period)+'" onchange="App.setFinanceMonth(this.value)"></label><p>Plan de '+fmtDate(p.dates[0])+' a '+fmtDate(p.dates[5])+'. Renta corriente de referencia: <strong>'+fmtMoney(row.rent)+'</strong>. Sus recibos y pagos se consultan en Servicios.</p>'+(index>=0?'<p>Aportación prevista: <strong>'+fmtMoney(row.rent+own('entry')+own('equipment'))+'</strong> más servicios y compras.</p>':after?'<p>El calendario de seis cuotas terminó. Cualquier saldo sin pagar sigue pendiente.</p>':before?'<p>El plan todavía no comienza en el mes seleccionado.</p>':'')+
+ '<div style="overflow-x:auto"><table><thead><tr><th>Obligación</th><th>Cuota del mes</th><th>Abonado del mes</th><th>Falta del mes</th><th>Saldo total pendiente</th></tr></thead><tbody>'+['entry','equipment'].map(k=>'<tr><td>'+(k==='entry'?'Adelanto de entrada':'Lavadora y secad…2464 tokens truncated…length? `<div class="panel" style="margin-bottom:12px;">
     <div class="panel-header"><div class="panel-title">${title}</div></div>
     <div class="panel-body pad0">${arr.map(reminderRow).join('')}</div></div>` : '';
   return `
@@ -2970,6 +2907,29 @@ function readFunding(prefix,total){
 }
 /* Integrity commands: explicit units of work, immutable operation receipts. */
 Object.assign(App,{
+ setFinanceMonth(value){if(!/^\d{4}-\d{2}$/.test(value))return;state.financeMonth=value;render();},
+ openFinanceSetup,
+ async saveFinanceSetup(){
+  if(accountRole!=='admin')throw Error('Solo el administrador configura el plan');
+  const input={creditorId:document.getElementById('fpCreditor').value,startDate:document.getElementById('fpStart').value,equipmentTotal:Number(document.getElementById('fpEquipment').value),equipmentMonthly:Number(document.getElementById('fpMonthly').value),firstPaid:document.getElementById('fpFirstPaid').checked,rows:[...document.querySelectorAll('.fp-row')].map(el=>({memberId:el.querySelector('.fp-member').value,entryTotal:Number(el.querySelector('.fp-entry').value),rent:Number(el.querySelector('.fp-rent').value)}))};
+  const plan=CasaFinance.create(input,state.members),name=id=>state.members.find(m=>m.id===id)?.name||'Integrante';
+  if(input.firstPaid&&input.startDate>todayISO())throw Error('No marques pagada una cuota futura');
+  if(!confirm('Guardar plan de seis cuotas desde '+fmtDate(plan.dates[0])+' hasta '+fmtDate(plan.dates[5])+'\n'+plan.rows.map(r=>name(r.memberId)+': deuda de entrada '+fmtMoney(r.entry.reduce((s,n)=>s+n,0))+'; parte del equipo '+fmtMoney(r.equipment.reduce((s,n)=>s+n,0))).join('\n')+'\nPrimera cuota entre integrantes: '+(input.firstPaid?'pagada':'pendiente')+'\nEl crédito queda pendiente de confirmar. ¿Guardar?'))return;
+  await Data.atomic(operationMeta('opening-finance-plan'),async t=>{if(t.config.financePlan)throw Error('Ya existe un plan de apertura');await t.put('settings','config',{financePlan:plan,revision:Number(t.config.revision||0)+1});});closeModal();toast('Plan de apertura registrado');
+ },
+ async undoFinancePayment(id){
+  if(accountRole!=='admin')throw Error('Solo el administrador corrige los abonos');
+  if(!confirm('¿Anular este abono y devolver su importe al saldo pendiente? El registro se conserva en el historial.'))return;
+  await Data.atomic({kind:'reverse-opening-plan-payment',opId:uid()},async t=>{const plan=t.config.financePlan;if(!plan)throw Error('Plan no disponible');const updated=CasaFinance.reverse(plan,id,t.id);await t.put('settings','config',{financePlan:updated,revision:Number(t.config.revision||0)+1});});toast('Abono anulado; saldo actualizado');
+ },
+ async recordFinancePayment(memberId,kind,index){
+  if(accountRole!=='admin')throw Error('Solo el administrador registra las cuotas de apertura');
+  const plan=state.settings.financePlan;if(!plan)throw Error('Plan no disponible');
+  const row=plan.rows.find(r=>r.memberId===memberId),amount=kind==='provider'?plan.rows.reduce((s,r)=>s+r.equipment[index],0):row[kind][index]-CasaFinance.paid(plan,memberId,kind,index);
+  const date=prompt('Fecha del pago real (AAAA-MM-DD)',todayISO());if(date===null)return;if(date>todayISO())throw Error('No registres pagos futuros');
+  if(!confirm((kind==='provider'?'Confirmar pago al proveedor del crédito':'Confirmar aportación del integrante')+' por '+fmtMoney(amount)+' el '+date+'?'))return;
+  await Data.atomic({kind:'opening-plan-payment',opId:uid()},async t=>{if(!t.config.financePlan)throw Error('Plan no disponible');const updated=CasaFinance.pay(t.config.financePlan,{memberId,kind,index,date,amount,id:t.id});await t.put('settings','config',{financePlan:updated,revision:Number(t.config.revision||0)+1});});toast('Pago registrado sin generar otro gasto');
+ },
  toggleItemTracking(){const simple=document.getElementById('itTracking').value==='simple';document.getElementById('itStatusWrap').hidden=!simple;document.getElementById('itQuantityWrap').hidden=simple;if(!simple&&state.editItemOriginal?.trackingMode==='simple')document.getElementById('itQty').value='';},
  async quickConsume(itemId){const mem=requireMember(),action=await InventoryService.consume({itemId,qty:1,date:todayISO(),memberId:mem.id},{kind:'quick-consumption',opId:uid()});state.inventoryUndo=action;state.inventoryUndoMessage=(stockVerb(state.items.find(i=>i.id===itemId))==='Saqué'?'Sacaste':'Usaste')+' 1 '+action.unit+' de '+action.name+'. Quedan '+action.remaining+'.';},
  async setStockStatus(itemId,status,closeAfter=false){requireMember();const action=await InventoryService.setStatus(itemId,status,{kind:'stock-status',opId:uid()});if(action){state.inventoryUndo=action;state.inventoryUndoMessage=action.name+': '+({hay:'Hay',poco:'Queda poco',comprar:'Se acabó'})[status]+(status==='hay'?'':'. Agregado a Por comprar');}if(closeAfter){closeModal();toast('Estado actualizado');}},
@@ -3264,4 +3224,3 @@ boot();
 </script>
 </body>
 </html>
-
