@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),app=require('./app-fixture');
 test('opening setup and payments require admin before presenting or changing records',async()=>{
  const {api,App,db,messages}=app();api.setRole('member');const before=db.snapshot();
- assert.throws(()=>App.openFinanceSetup(),/administrador/);
+ assert.throws(()=>App.openFinanceSetup(),/administrador/);assert.throws(()=>App.openMonthlyContribution(),/administrador/);
+ await App.saveMonthlyContribution();assert.match(messages.at(-1),/administrador/);await App.reverseMonthlyContribution('x');assert.match(messages.at(-1),/administrador/);await App.payCollectedRent('x');assert.match(messages.at(-1),/administrador/);
  await App.saveFinanceSetup();assert.match(messages.at(-1),/administrador/);
  await App.recordFinancePayment('a','entry',0);assert.match(messages.at(-1),/administrador/);
  await App.renameFinancePlan();assert.match(messages.at(-1),/administrador/);

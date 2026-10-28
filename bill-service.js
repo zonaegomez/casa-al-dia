@@ -36,6 +36,8 @@
    }else if(C.cents(input.receiptTotal)!==C.cents(receipt.amount))throw Error('El recibo ya tiene un importe confirmado; no cambies su total al registrar una aportación');
    const previous=[];for(const pid of b.paymentIds||[]){const p=await t.get('billPayments',pid);if(p)previous.push(p);}
    if(C.cents(input.amount)>C.cents(C.receiptProgress({...receipt,id:receiptId},previous).pending))throw Error('La aportación excede el pendiente del recibo');
+   const held=(t.config.financePlan?.contributions||[]).filter(x=>!x.voided&&!x.forwardedPaymentId&&x.receiptId===receiptId).reduce((s,x)=>s+C.cents(x.rent),0);
+   if(C.cents(input.amount)>C.cents(C.receiptProgress({...receipt,id:receiptId},previous).pending)-held)throw Error('Hay dinero recibido para este recibo. Usa Pagar con aportaciones recibidas para aplicarlo sin duplicarlo.');
    const payerIds=(input.splits?.length?input.splits:[{memberId:input.memberId}]).map(p=>p.memberId);
    if(payerIds.some(pid=>!(members?members():[]).some(m=>m.id===pid&&m.active!==false)))throw Error('Selecciona pagadores activos');
    if(isNewReceipt)await t.put('billReceipts',receiptId,receipt,false);
@@ -47,8 +49,28 @@
   const b=await t.get('bills',billId),p=await t.get('billPayments',pid);if(!b||!p||p.voided||p.billId!==billId)throw Error('Pago no disponible');
   if(p.scheduleUnverified)throw Error('El calendario de este pago antiguo requiere conciliación antes de editarlo o anularlo');
   if(p.receiptId){if(!patch.voided)throw Error('Para corregir una aportación, anúlala y captura la correcta');const receipt=await t.get('billReceipts',p.receiptId);if(!receipt)throw Error('Falta el recibo de origen');}
+  if(p.collectedContributionIds?.length){
+   if(!patch.voided)throw Error('El pago con aportaciones se corrige anulándolo primero');
+   const plan=t.config.financePlan;if(!plan)throw Error('Falta el plan de origen');
+   await t.put('settings','config',{financePlan:{...plan,contributions:(plan.contributions||[]).map(x=>x.forwardedPaymentId===pid?{...x,forwardedPaymentId:null}:x)}});
+  }
   const next={...p,...patch};await t.put('billPayments',pid,next,false);await schedule(t,b,billId,pid,next);
  });}
- return {registerReceipt,pay,edit};
+ async function payCollected(receiptId,paidAt,meta){return store.atomic(meta,async t=>{
+  C.date(paidAt);if(paidAt>C.today())throw Error('No registres pagos futuros');
+  const receipt=await t.get('billReceipts',receiptId);if(!receipt)throw Error('Recibo no disponible');
+  const bill=await t.get('bills',receipt.billId);if(!bill||bill.archived)throw Error('Servicio no disponible');
+  const plan=t.config.financePlan,contributions=(plan?.contributions||[]).filter(x=>!x.voided&&!x.forwardedPaymentId&&x.receiptId===receiptId&&x.rent>0);
+  if(!contributions.length)throw Error('No hay aportaciones recibidas por aplicar');
+  const previous=[];for(const id of bill.paymentIds||[]){const p=await t.get('billPayments',id);if(p)previous.push(p);}
+  const totals=new Map();for(const p of contributions)totals.set(p.memberId,(totals.get(p.memberId)||0)+C.cents(p.rent));
+  const splits=[...totals].map(([memberId,n])=>({memberId,amount:n/100})),amount=splits.reduce((s,p)=>s+C.cents(p.amount),0)/100;
+  if(C.cents(amount)>C.cents(C.receiptProgress({...receipt,id:receiptId},previous).pending))throw Error('Las aportaciones superan el pendiente. Concilia el recibo antes de aplicarlas.');
+  if(contributions.some(p=>p.date>paidAt))throw Error('La fecha de pago al proveedor no puede ser anterior a la recepción de estos fondos');
+  const entry={billId:receipt.billId,receiptId,dueDate:receipt.dueDate,period:C.cycle(receipt.dueDate,t.config.cycleStartDay||1),paidAt,amount,participantIds:receipt.participantIds,splits,memberId:null,memberName:'Aportaciones recibidas',executedByMemberId:plan.creditorId,collectedContributionIds:contributions.map(x=>x.id)};
+  await t.put('settings','config',{financePlan:{...plan,contributions:plan.contributions.map(x=>contributions.some(p=>p.id===x.id)?{...x,forwardedPaymentId:t.id}:x)}});
+  await t.put('billPayments',t.id,entry,false);await schedule(t,bill,receipt.billId,t.id,entry);return t.id;
+ });}
+ return {registerReceipt,pay,edit,payCollected};
 });
 

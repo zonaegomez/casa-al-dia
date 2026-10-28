@@ -500,6 +500,7 @@ window.CASA_THEME_KEY = 'casa-theme-v1';
 <script src="bill-service.js"></script>
 <script src="inventory-service.js"></script>
 <script src="finance-plans.js"></script>
+<script src="monthly-service.js"></script>
 <script>
 /* ============================================================
    CASA AL DÍA — ERP doméstico
@@ -721,6 +722,7 @@ let rawBills=[], billPayments=[], loadingCollections=new Set();
 const Data = createCasaStore({state,core:CasaCore,db:()=>state.db,actor:()=>signedInUser&&signedInUser.uid,ready:()=>accessReady&&syncReady&&navigator.onLine,newId:uid});
 const Purchases=createPurchaseService({store:Data,C:CasaCore,members:()=>state.members});
 const BillService=createBillService({store:Data,C:CasaCore,addMonths,members:()=>state.members});
+const MonthlyService=createMonthlyService({store:Data,C:CasaCore,F:CasaFinance});
 const InventoryService=createInventoryService({store:Data,C:CasaCore,members:()=>state.members});
 function activeMembers(){return state.members.filter(m=>m.active!==false);}
 function participants(){return CasaCore.participants(state.members);}
@@ -1613,6 +1615,7 @@ function billCard(b){
     <div class="bill-amount">${fmtMoney(receipt?receipt.amount:b.amountEstimate||0)}</div>
     <div class="bill-meta">${receipt?'Recibo confirmado · pendiente '+fmtMoney(progress.pending):(b.amountType==='variable'?'Estimado; confirma el total de este recibo':'Importe por recibo')}${b.splitPolicy==='fixed'?' · cuotas acordadas':' · partes iguales'}</div>
     ${receipt?'<div style="margin:10px 0">'+progress.members.map(p=>'<div class="bill-meta">'+esc(state.members.find(m=>m.id===p.memberId)?.name||'Integrante')+': '+fmtMoney(p.paid)+' de '+fmtMoney(p.owed)+' · '+Math.round(p.percent)+'%'+(p.credit?' · adelantó '+fmtMoney(p.credit):'')+'</div>').join('')+'</div>':''}
+    ${receipt&&MonthlyService.held(state.settings.financePlan||{},receipt.id)>0?`<p>Recibido por el responsable: ${fmtMoney(MonthlyService.held(state.settings.financePlan,receipt.id))}. Todavía pendiente de pago al proveedor.</p>${accountRole==='admin'?`<button class="btn btn-sm" onclick="App.payCollectedRent('${receipt.id}')">Pagar con aportaciones recibidas</button>`:''}`:''}
     <div class="bill-meta">${b.nextDueDate? 'Próximo pago: '+fmtDate(b.nextDueDate,{day:'numeric',month:'long'}) : 'Sin próxima fecha'}${lastPaid?' · último pago '+fmtDate(lastPaid.paidAt):''}</div>
     <div class="bill-actions">
       <button class="btn btn-sm btn-primary" onclick="App.openPayBill('${b.id}')">${receipt?'Registrar aportación':'Registrar recibo'}</button>
@@ -1782,6 +1785,7 @@ function financePlansBody(){
  const kinds=['entry','equipment'].filter(k=>p.rows.some(r=>r[k].some(n=>n>0)));
  const externalAmount=i=>p.rows.reduce((s,r)=>s+r.equipment[i],0);
  return `<div class="card" style="padding:20px"><h2>Mi plan de pagos · ${esc(name(accountMemberId))}</h2>
+ ${accountRole==='admin'?'<button class="btn btn-primary" onclick="App.openMonthlyContribution()">Registrar aportación mensual</button>':''}
  <label>Mes <input type="month" value="${esc(period)}" onchange="App.setFinanceMonth(this.value)"></label>
  ${p.entryDescription?`<p><strong>${esc(labels.entry)} incluye:</strong> ${esc(p.entryDescription)}</p>`:''}
  <p>${p.dates.length} cuota(s) mensuales, del ${fmtDate(p.dates[0])} al ${fmtDate(last)}. Responsable del adelanto: ${esc(name(p.creditorId))}.</p>
@@ -1792,13 +1796,15 @@ function financePlansBody(){
  </tbody></table></div><p>Los abonos de este plan reducen sus saldos pendientes y no vuelven a sumar en los gastos de la casa.</p>
  ${creditor?`<h3>Por recuperar de otros integrantes</h3>${p.rows.filter(r=>r.memberId!==p.creditorId).map(r=>`<p>${esc(name(r.memberId))}: ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(CasaFinance.remaining(p,r,k))).join(' · ')}</p>`).join('')}
  ${hasExternal?`<h3>Pago externo · ${esc(labels.equipment)}</h3><p>Recibir aportaciones de los integrantes no confirma el pago al banco, tienda o proveedor.</p><p>Saldo al proveedor: ${fmtMoney(p.equipmentTotal-p.providerPayments.filter(x=>!x.voided).reduce((s,x)=>s+x.amount,0))}</p>`:''}`:''}
+ <p>Renta o servicio entregado al responsable este mes: <strong>${fmtMoney((p.contributions||[]).filter(x=>!x.voided&&x.memberId===accountMemberId&&x.month===period).reduce((s,x)=>s+x.rent,0))}</strong>. De ese importe, ${fmtMoney((p.contributions||[]).filter(x=>!x.voided&&!x.forwardedPaymentId&&x.memberId===accountMemberId&&x.month===period).reduce((s,x)=>s+x.rent,0))} siguen por aplicar al proveedor. Consulta el pago externo en Servicios.</p>
  <details><summary>Calendario y abonos registrados</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(row[k][i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,k,i))).join(' · ')}</p>`).join('')}
  <p>Los abonos iniciales confirman aportaciones entre integrantes, no pagos externos.</p></details>
  ${accountRole==='admin'?`<details><summary>Administrar cuotas de la casa</summary><p>Registra únicamente pagos efectivamente realizados. Las correcciones conservan el historial.</p>
  <button class="btn btn-sm" onclick="App.renameFinancePlan()">Editar nombres de los conceptos</button>
  ${p.rows.map(r=>`<details><summary>${esc(name(r.memberId))}</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} ${kinds.filter(k=>r[k][i]>CasaFinance.paid(p,r.memberId,k,i)).map(k=>`<button class="btn btn-sm" onclick="App.recordFinancePayment('${r.memberId}','${k}',${i})">${esc(labels[k])} ${fmtMoney(r[k][i]-CasaFinance.paid(p,r.memberId,k,i))}</button>`).join(' ')}</p>`).join('')}</details>`).join('')}
  ${hasExternal?`<h3>Pagos externos · ${esc(labels.equipment)}</h3>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${p.providerPayments.some(x=>!x.voided&&x.index===i)?'Pagado al proveedor':`<button class="btn btn-sm" onclick="App.recordFinancePayment('','provider',${i})">Registrar pago ${fmtMoney(externalAmount(i))}</button>`}</p>`).join('')}`:''}
- <h3>Historial de pagos</h3>${[...p.payments,...p.providerPayments.map(x=>({...x,kind:'provider'}))].map(x=>`<p>${esc(x.kind==='provider'?'Proveedor':name(x.memberId))} · ${esc(x.kind==='provider'?labels.equipment:labels[x.kind])} · ${fmtDate(x.date)} · ${fmtMoney(x.amount)}${x.voided?' · Anulado':` <button class="btn btn-sm" onclick="App.undoFinancePayment('${x.id}')">Anular abono</button>`}</p>`).join('')}</details>`:''}</div>`;
+ <h3>Aportaciones mensuales recibidas</h3>${(p.contributions||[]).map(x=>`<p>${esc(name(x.memberId))} · ${fmtDate(x.date)} · ${esc(x.month)} · total ${fmtMoney(x.total)} (renta/servicio ${fmtMoney(x.rent)}, ${esc(labels.entry)} ${fmtMoney(x.entry)}, ${esc(labels.equipment)} ${fmtMoney(x.equipment)}) · ${x.voided?'Anulada':!x.rent?'Solo cuotas del plan':x.forwardedPaymentId?'Renta aplicada al proveedor':'Renta aún no aplicada al proveedor'}${!x.voided?` <button class="btn btn-sm" onclick="App.reverseMonthlyContribution('${x.id}')">Anular aportación completa</button>`:''}</p>`).join('')}
+ <h3>Historial de pagos</h3>${[...p.payments,...p.providerPayments.map(x=>({...x,kind:'provider'}))].map(x=>`<p>${esc(x.kind==='provider'?'Proveedor':name(x.memberId))} · ${esc(x.kind==='provider'?labels.equipment:labels[x.kind])} · ${fmtDate(x.date)} · ${fmtMoney(x.amount)}${x.voided?' · Anulado':x.contributionId?' · Incluido en aportación mensual':` <button class="btn btn-sm" onclick="App.undoFinancePayment('${x.id}')">Anular abono</button>`}</p>`).join('')}</details>`:''}</div>`;
 }
 function openFinanceSetup(){
  if(accountRole!=='admin')throw Error('Solo el administrador crea el plan');
@@ -1828,6 +1834,26 @@ function openFinanceSetup(){
  <label><input type="checkbox" id="fpFirstPaid"> Todas las personas participantes ya cubrieron su primera cuota. Esto no confirma ningún pago externo.</label>
  <p>Revisa los importes antes de guardar. Este formulario no borra registros anteriores ni crea gastos nuevos.</p><button class="btn btn-primary" onclick="App.saveFinanceSetup()">Revisar y guardar plan</button></div>`);
  App.refreshFinanceSetup();
+}
+
+function modalMonthlyContribution(){
+ if(accountRole!=='admin')throw Error('Solo el administrador registra las aportaciones recibidas');
+ const plan=state.settings.financePlan;if(!plan)throw Error('Configura el plan primero');
+ const names=id=>state.members.find(m=>m.id===id)?.name||'Integrante';
+ openModal(`<div class="modal-header"><h3>Registrar aportación mensual</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body">
+ <p>Registra una transferencia o entrega de dinero y distribúyela entre los conceptos. Si seleccionas a quien administra el dinero, registras su aportación propia. La parte de renta o servicio queda recibida por ${esc(names(plan.creditorId))}; todavía no es un pago al proveedor.</p>
+ <div class="field"><label>¿Quién aportó?</label><select id="mcMember" onchange="App.refreshMonthlyContribution()">${plan.rows.map(r=>`<option value="${r.memberId}" ${r.memberId===accountMemberId?'selected':''}>${esc(names(r.memberId))}</option>`).join('')}</select></div>
+ <div class="field"><label>Mes al que corresponde</label><input id="mcMonth" type="month" value="${esc(state.financeMonth||todayISO().slice(0,7))}" onchange="App.refreshMonthlyContribution()"></div>
+ <div class="field"><label>Fecha en que se recibió el dinero</label><input id="mcDate" type="date" value="${todayISO()}"></div>
+ <div class="field"><label>Recibo de renta o servicio (opcional)</label><select id="mcReceipt" onchange="App.refreshMonthlyRent()"></select><small>Confirma primero el recibo en Servicios. Si el proveedor ya recibió el pago, los reembolsos se registran en Saldo entre integrantes.</small></div>
+ <div class="field"><label>Parte destinada a renta o servicio</label><input id="mcRent" type="number" min="0" step="0.01" oninput="App.recalcMonthlyContribution()"></div>
+ <div class="field"><label>${esc(plan.entryLabel||'Saldo por devolver')}</label><input id="mcEntry" type="number" min="0" step="0.01" oninput="App.recalcMonthlyContribution()"></div>
+ <div class="field"><label>${esc(plan.equipmentLabel||'Compra financiada')}</label><input id="mcEquipment" type="number" min="0" step="0.01" oninput="App.recalcMonthlyContribution()"></div>
+ <p id="mcBreakdown" role="status" aria-live="polite"></p>
+ <div class="field"><label>Importe total que se recibió</label><input id="mcTotal" type="number" min="0" step="0.01"></div>
+ <p>Puedes registrar un abono parcial. El importe recibido debe coincidir con la suma de las tres partes. Usa cero en los conceptos que no se incluyeron.</p>
+ <button class="btn btn-primary" onclick="App.saveMonthlyContribution()">Revisar y registrar aportación</button></div>`);
+ App.refreshMonthlyContribution();
 }
 
 /* ---------------- Deudas internas (viven dentro de "Cuentas") ---------------- */
@@ -3037,6 +3063,42 @@ function readFunding(prefix,total){
 Object.assign(App,{
  setFinanceMonth(value){if(!/^\d{4}-\d{2}$/.test(value))return;state.financeMonth=value;render();},
  openFinanceSetup,
+ openMonthlyContribution:modalMonthlyContribution,
+ refreshMonthlyContribution(){
+  const plan=state.settings.financePlan,id=document.getElementById('mcMember').value,month=document.getElementById('mcMonth').value,row=plan.rows.find(r=>r.memberId===id),index=plan.dates.findIndex(d=>d.slice(0,7)===month);
+  document.getElementById('mcEntry').value=index<0?0:Math.max(0,row.entry[index]-CasaFinance.paid(plan,id,'entry',index));
+  document.getElementById('mcEquipment').value=index<0?0:Math.max(0,row.equipment[index]-CasaFinance.paid(plan,id,'equipment',index));
+  const options=state.billReceipts.filter(r=>r.dueDate.slice(0,7)===month&&r.beneficiaryShares.some(x=>x.memberId===id)&&CasaCore.receiptProgress(r,billPayments).pending>0);
+  document.getElementById('mcReceipt').innerHTML='<option value="">Sin recibo — solo cuotas del plan</option>'+options.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name)+' · '+fmtDate(r.dueDate)+'</option>').join('');
+  if(options.length===1)document.getElementById('mcReceipt').value=options[0].id;
+  App.refreshMonthlyRent();
+ },
+ refreshMonthlyRent(){
+  const id=document.getElementById('mcMember').value,receipt=state.billReceipts.find(r=>r.id===document.getElementById('mcReceipt').value);
+  const pending=receipt?CasaCore.receiptProgress(receipt,billPayments).members.find(x=>x.memberId===id)?.pending||0:0;
+  document.getElementById('mcRent').value=receipt?Math.max(0,pending-MonthlyService.held(state.settings.financePlan,receipt.id,id)):0;
+  App.recalcMonthlyContribution();document.getElementById('mcTotal').value=document.getElementById('mcBreakdown').dataset.total;
+ },
+ recalcMonthlyContribution(){
+  const el=document.getElementById('mcBreakdown');try{const total=['mcRent','mcEntry','mcEquipment'].reduce((s,id)=>s+CasaCore.cents(document.getElementById(id).value||0),0)/100;el.dataset.total=total;el.textContent='Suma del desglose: '+fmtMoney(total);}catch(e){el.dataset.total=0;el.textContent=e.message;}
+ },
+ async saveMonthlyContribution(){
+  if(accountRole!=='admin')throw Error('Solo el administrador registra las aportaciones recibidas');
+  const input={memberId:document.getElementById('mcMember').value,month:document.getElementById('mcMonth').value,date:document.getElementById('mcDate').value,receiptId:document.getElementById('mcReceipt').value,rent:CasaCore.money(document.getElementById('mcRent').value),entry:CasaCore.money(document.getElementById('mcEntry').value),equipment:CasaCore.money(document.getElementById('mcEquipment').value),total:CasaCore.money(document.getElementById('mcTotal').value)};
+  const total=CasaCore.cents(input.rent)+CasaCore.cents(input.entry)+CasaCore.cents(input.equipment);if(!total||total!==CasaCore.cents(input.total))throw Error('El importe recibido debe coincidir con el desglose');
+  const name=state.members.find(m=>m.id===input.memberId)?.name||'Integrante';if(!confirm('Registrar '+fmtMoney(input.total)+' de '+name+' para '+input.month+'?\nRenta/servicio: '+fmtMoney(input.rent)+'\nCuota de adelanto: '+fmtMoney(input.entry)+'\nCuota de compra: '+fmtMoney(input.equipment)+'\nLa parte del servicio queda recibida, aún no pagada al proveedor.'))return;
+  await MonthlyService.receive(input,operationMeta('monthly-contribution'));closeModal();toast('Aportación distribuida; el pago al proveedor se confirma en Servicios');
+ },
+ async reverseMonthlyContribution(id){
+  if(accountRole!=='admin')throw Error('Solo el administrador corrige las aportaciones');if(!confirm('¿Anular esta aportación completa y devolver sus importes a pendientes?'))return;
+  await MonthlyService.reverse(id,{kind:'reverse-monthly-contribution',opId:uid()});toast('Aportación anulada; saldos actualizados');
+ },
+ async payCollectedRent(receiptId){
+  if(accountRole!=='admin')throw Error('Solo el administrador aplica las aportaciones recibidas');
+  const amount=MonthlyService.held(state.settings.financePlan,receiptId),date=prompt('Fecha en que se pagó realmente al proveedor (AAAA-MM-DD)',todayISO());if(date===null)return;
+  if(!confirm('¿Confirmar pago al proveedor por '+fmtMoney(amount)+' con las aportaciones recibidas?'))return;
+  await BillService.payCollected(receiptId,date,{kind:'pay-collected-service',opId:uid()});toast('Pago al proveedor registrado; aportaciones aplicadas una sola vez');
+ },
  refreshFinanceSetup(){
   const label=document.getElementById('fpEntryLabel');if(!label)return;
   const entryLabel=label.value.trim()||'Dinero por devolver',equipmentLabel=document.getElementById('fpEquipmentLabel').value.trim()||'Compra financiada';
