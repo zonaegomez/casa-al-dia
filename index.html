@@ -450,6 +450,27 @@
   }
   [hidden]{display:none !important;}
 .field input[type="checkbox"]{width:auto;min-height:0;padding:0;margin-right:8px;vertical-align:middle;}
+
+  .finance-panel{max-width:1120px;}
+  .finance-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+  .finance-heading h2{font-size:18px;margin:0;}
+  .finance-heading label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);}
+  .finance-heading input{padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;}
+  .finance-month-summary{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;padding:22px;background:var(--surface);border:1px solid var(--border);border-radius:16px;}
+  .finance-month-amount{font-size:clamp(28px,4vw,36px);font-weight:800;letter-spacing:-1px;margin:5px 0;}
+  .finance-month-summary small{color:var(--ink-soft);}
+  .finance-progress-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px;margin:18px 0;}
+  .finance-progress-card{padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:16px;}
+  .finance-progress-card>strong{display:block;font-size:14px;line-height:1.5;}
+  .finance-disclosures{border-top:1px solid var(--border);margin-top:22px;}
+  .finance-detail{border-bottom:1px solid var(--border);}
+  .finance-detail>summary{cursor:pointer;padding:16px 2px;font-size:14px;font-weight:600;color:var(--ink-soft);}
+  .finance-detail-body{padding:0 2px 18px;}
+  .finance-detail-body details{margin:12px 0;}
+  .finance-detail-body summary{cursor:pointer;padding:8px 0;}
+  .finance-detail-body p{font-size:13px;line-height:1.7;}
+  @media(max-width:600px){.finance-month-summary{padding:18px;}.finance-month-summary>.btn{width:100%;}.finance-heading{align-items:flex-start;}}
+
 </style>
 <script>
 /* Tema de apariencia (color de acento + claro/oscuro/automático). Se aplica
@@ -1790,30 +1811,40 @@ function financePlansBody(){
  const creditor=p.creditorId===accountMemberId,hasExternal=p.equipmentTotal>0;
  const kinds=['entry','equipment'].filter(k=>p.rows.some(r=>r[k].some(n=>n>0)));
  const externalAmount=i=>p.rows.reduce((s,r)=>s+r.equipment[i],0);
- return `<div class="card" style="padding:20px"><h2>Mi plan de pagos · ${esc(name(accountMemberId))}</h2>
- ${accountRole==='admin'?'<button class="btn btn-primary" onclick="App.openMonthlyContribution()">Registrar aportación mensual</button>':''}
- <label>Mes <input type="month" value="${esc(period)}" onchange="App.setFinanceMonth(this.value)"></label>
- ${p.entryDescription?`<p><strong>${esc(labels.entry)} incluye:</strong> ${esc(p.entryDescription)}</p>`:''}
- <p>${p.dates.length} cuota(s) mensuales, del ${fmtDate(p.dates[0])} al ${fmtDate(last)}. Responsable del adelanto: ${esc(name(p.creditorId))}.</p>
- ${row.rent?`<p>Gasto fijo mensual de referencia: <strong>${fmtMoney(row.rent)}</strong>. Sus recibos y pagos se registran en Servicios; no se marcan pagados desde este plan.</p>`:''}
- ${index>=0?`<p>Aportación prevista: <strong>${fmtMoney(row.rent+own('entry')+own('equipment'))}</strong>${row.rent?' (incluye la referencia mensual)':''}. Otros gastos de la casa se suman aparte.</p>`:period>last.slice(0,7)?'<p>El calendario terminó. Cualquier saldo sin pagar sigue pendiente.</p>':'<p>El plan todavía no comienza en el mes seleccionado.</p>'}
- <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:20px 0" class="finance-progress-cards">
- ${kinds.map(k=>{const total=row[k].reduce((s,n)=>s+CasaCore.cents(n),0)/100,covered=Math.max(0,total-CasaFinance.remaining(p,row,k));return `<section style="padding:16px;border:1px solid var(--border);border-radius:14px" aria-label="Avance de ${esc(labels[k])}"><strong>${esc(labels[k])}</strong>${index>=0?financeProgressBar('Este mes',paid(k),own(k)):'<p class="page-sub">Sin cuota en el mes seleccionado.</p>'}${total?financeProgressBar('Total del plan',covered,total):'<p class="page-sub">Sin deuda propia en este concepto.</p>'}</section>`;}).join('')}
+ const planned=row.rent+(index>=0?own('entry')+own('equipment'):0);
+ const rentReceived=(p.contributions||[]).filter(x=>!x.voided&&x.memberId===accountMemberId&&x.month===period).reduce((s,x)=>s+x.rent,0);
+ const rentHeld=(p.contributions||[]).filter(x=>!x.voided&&!x.forwardedPaymentId&&x.memberId===accountMemberId&&x.month===period).reduce((s,x)=>s+x.rent,0);
+ return `<div class="finance-panel">
+ <div class="finance-heading"><h2>${esc(name(accountMemberId))}</h2><label>Mes <input type="month" value="${esc(period)}" onchange="App.setFinanceMonth(this.value)"></label></div>
+ <div class="finance-month-summary"><div><div class="page-sub">Aportación prevista del mes</div><div class="finance-month-amount">${fmtMoney(planned)}</div><small>${row.rent?'Incluye '+fmtMoney(row.rent)+' de referencia mensual.':'Cuotas del plan.'} Otros gastos van aparte.</small></div>
+ ${accountRole==='admin'?'<button class="btn btn-primary" onclick="App.openMonthlyContribution()">Registrar aportación mensual</button>':''}</div>
+ ${index<0?`<p class="page-sub">${period>last.slice(0,7)?'El calendario terminó; los saldos pendientes siguen vigentes.':'El plan aún no comienza en este mes.'}</p>`:''}
+ <div class="finance-progress-cards">
+ ${kinds.map(k=>{const total=row[k].reduce((s,n)=>s+CasaCore.cents(n),0)/100,covered=Math.max(0,total-CasaFinance.remaining(p,row,k));return `<section class="finance-progress-card" aria-label="Avance de ${esc(labels[k])}"><strong>${esc(labels[k])}</strong>${index>=0?financeProgressBar('Este mes',paid(k),own(k)):'<p class="page-sub">Sin cuota en el mes seleccionado.</p>'}${total?financeProgressBar('Total del plan',covered,total):'<p class="page-sub">Sin deuda propia en este concepto.</p>'}</section>`;}).join('')}
  </div>
- <div style="overflow-x:auto"><table><thead><tr><th>Concepto</th><th>Cuota del mes</th><th>Abonado del mes</th><th>Falta del mes</th><th>Saldo total pendiente</th></tr></thead><tbody>
+ ${rentReceived?`<p class="page-sub">Renta o servicio recibido: <strong>${fmtMoney(rentReceived)}</strong>${rentHeld?' · '+fmtMoney(rentHeld)+' por aplicar al proveedor.':' · aplicado al proveedor.'}</p>`:''}
+ <div class="finance-disclosures">
+ <details class="finance-detail"><summary>Ver desglose y calendario</summary><div class="finance-detail-body">
+ <div style="overflow-x:auto"><table><thead><tr><th>Concepto</th><th>Cuota del mes</th><th>Abonado</th><th>Falta este mes</th><th>Saldo del plan</th></tr></thead><tbody>
  ${kinds.map(k=>`<tr><td>${esc(labels[k])}</td><td>${fmtMoney(own(k))}</td><td>${fmtMoney(paid(k))}</td><td>${fmtMoney(Math.max(0,own(k)-paid(k)))}</td><td>${fmtMoney(CasaFinance.remaining(p,row,k))}</td></tr>`).join('')}
- </tbody></table></div><p>Los abonos de este plan reducen sus saldos pendientes y no vuelven a sumar en los gastos de la casa.</p>
- ${creditor?`<h3>Por recuperar de otros integrantes</h3>${p.rows.filter(r=>r.memberId!==p.creditorId).map(r=>`<p>${esc(name(r.memberId))}: ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(CasaFinance.remaining(p,r,k))).join(' · ')}</p>`).join('')}
- ${hasExternal?`<h3>Pago externo · ${esc(labels.equipment)}</h3><p>Recibir aportaciones de los integrantes no confirma el pago al banco, tienda o proveedor.</p><p>Saldo al proveedor: ${fmtMoney(p.equipmentTotal-p.providerPayments.filter(x=>!x.voided).reduce((s,x)=>s+x.amount,0))}</p>`:''}`:''}
- <p>Renta o servicio entregado al responsable este mes: <strong>${fmtMoney((p.contributions||[]).filter(x=>!x.voided&&x.memberId===accountMemberId&&x.month===period).reduce((s,x)=>s+x.rent,0))}</strong>. De ese importe, ${fmtMoney((p.contributions||[]).filter(x=>!x.voided&&!x.forwardedPaymentId&&x.memberId===accountMemberId&&x.month===period).reduce((s,x)=>s+x.rent,0))} siguen por aplicar al proveedor. Consulta el pago externo en Servicios.</p>
- <details><summary>Calendario y abonos registrados</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(row[k][i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,k,i))).join(' · ')}</p>`).join('')}
- <p>Los abonos iniciales confirman aportaciones entre integrantes, no pagos externos.</p></details>
- ${accountRole==='admin'?`<details><summary>Administrar cuotas de la casa</summary><p>Registra únicamente pagos efectivamente realizados. Las correcciones conservan el historial.</p>
+ </tbody></table></div>
+ <details><summary>Calendario y abonos registrados</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(row[k][i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,k,i))).join(' · ')}</p>`).join('')}</details>
+ <details><summary>Información del plan</summary><p>${p.dates.length} cuota(s), del ${fmtDate(p.dates[0])} al ${fmtDate(last)}. Responsable: ${esc(name(p.creditorId))}.</p>
+ ${p.entryDescription?`<p><strong>${esc(labels.entry)}:</strong> ${esc(p.entryDescription)}</p>`:''}
+ <p>La referencia mensual se controla en Servicios. Los abonos del plan no generan otro gasto ni confirman pagos externos.</p>
+ <p>Renta o servicio recibido mediante aportaciones este mes: ${fmtMoney(rentReceived)} · por aplicar al proveedor: ${fmtMoney(rentHeld)}. Cero aquí no confirma que exista una deuda.</p></details>
+ </div></details>
+ ${creditor?`<details class="finance-detail finance-creditor"><summary>Por recuperar y pagos externos</summary><div class="finance-detail-body"><h3>Por recuperar de otros integrantes</h3>${p.rows.filter(r=>r.memberId!==p.creditorId).map(r=>`<p>${esc(name(r.memberId))}: ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(CasaFinance.remaining(p,r,k))).join(' · ')}</p>`).join('')}
+ ${hasExternal?`<h3>${esc(labels.equipment)}</h3><p>Saldo al proveedor: ${fmtMoney(p.equipmentTotal-p.providerPayments.filter(x=>!x.voided).reduce((s,x)=>s+x.amount,0))}</p><small>Recibir aportaciones no confirma el pago al proveedor.</small>`:''}</div></details>`:''}
+ ${accountRole==='admin'?`<details class="finance-detail finance-admin"><summary>Administrar cuotas de la casa</summary><div class="finance-detail-body">
  <button class="btn btn-sm" onclick="App.renameFinancePlan()">Editar nombres de los conceptos</button>
- ${p.rows.map(r=>`<details><summary>${esc(name(r.memberId))}</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} ${kinds.filter(k=>r[k][i]>CasaFinance.paid(p,r.memberId,k,i)).map(k=>`<button class="btn btn-sm" onclick="App.recordFinancePayment('${r.memberId}','${k}',${i})">${esc(labels[k])} ${fmtMoney(r[k][i]-CasaFinance.paid(p,r.memberId,k,i))}</button>`).join(' ')}</p>`).join('')}</details>`).join('')}
- ${hasExternal?`<h3>Pagos externos · ${esc(labels.equipment)}</h3>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${p.providerPayments.some(x=>!x.voided&&x.index===i)?'Pagado al proveedor':`<button class="btn btn-sm" onclick="App.recordFinancePayment('','provider',${i})">Registrar pago ${fmtMoney(externalAmount(i))}</button>`}</p>`).join('')}`:''}
- <h3>Aportaciones mensuales recibidas</h3>${(p.contributions||[]).map(x=>`<p>${esc(name(x.memberId))} · ${fmtDate(x.date)} · ${esc(x.month)} · total ${fmtMoney(x.total)} (renta/servicio ${fmtMoney(x.rent)}, ${esc(labels.entry)} ${fmtMoney(x.entry)}, ${esc(labels.equipment)} ${fmtMoney(x.equipment)}) · ${x.voided?'Anulada':!x.rent?'Solo cuotas del plan':x.forwardedPaymentId?'Renta aplicada al proveedor':'Renta aún no aplicada al proveedor'}${!x.voided?` <button class="btn btn-sm" onclick="App.reverseMonthlyContribution('${x.id}')">Anular aportación completa</button>`:''}</p>`).join('')}
- <h3>Historial de pagos</h3>${[...p.payments,...p.providerPayments.map(x=>({...x,kind:'provider'}))].map(x=>`<p>${esc(x.kind==='provider'?'Proveedor':name(x.memberId))} · ${esc(x.kind==='provider'?labels.equipment:labels[x.kind])} · ${fmtDate(x.date)} · ${fmtMoney(x.amount)}${x.voided?' · Anulado':x.contributionId?' · Incluido en aportación mensual':` <button class="btn btn-sm" onclick="App.undoFinancePayment('${x.id}')">Anular abono</button>`}</p>`).join('')}</details>`:''}</div>`;
+ <details><summary>Registrar cuotas por integrante</summary>${p.rows.map(r=>`<details><summary>${esc(name(r.memberId))}</summary>${p.dates.map((d,i)=>{const pending=kinds.filter(k=>r[k][i]>CasaFinance.paid(p,r.memberId,k,i));return pending.length?`<p>${fmtDate(d)} ${pending.map(k=>`<button class="btn btn-sm" onclick="App.recordFinancePayment('${r.memberId}','${k}',${i})">${esc(labels[k])} ${fmtMoney(r[k][i]-CasaFinance.paid(p,r.memberId,k,i))}</button>`).join(' ')}</p>`:'';}).join('')}</details>`).join('')}</details>
+ ${hasExternal?`<details><summary>Pagos externos · ${esc(labels.equipment)}</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${p.providerPayments.some(x=>!x.voided&&x.index===i)?'Pagado al proveedor':`<button class="btn btn-sm" onclick="App.recordFinancePayment('','provider',${i})">Registrar pago ${fmtMoney(externalAmount(i))}</button>`}</p>`).join('')}</details>`:''}
+ <details><summary>Aportaciones mensuales recibidas (${(p.contributions||[]).length})</summary>${(p.contributions||[]).map(x=>`<details><summary>${esc(name(x.memberId))} · ${fmtDate(x.date)} · ${fmtMoney(x.total)}${x.voided?' · Anulada':''}</summary><p>Mes: ${esc(x.month)} · Renta/servicio: ${fmtMoney(x.rent)} · ${esc(labels.entry)}: ${fmtMoney(x.entry)} · ${esc(labels.equipment)}: ${fmtMoney(x.equipment)}</p><p>${x.voided?'Anulada':!x.rent?'Solo cuotas del plan':x.forwardedPaymentId?'Renta aplicada al proveedor':'Renta pendiente de aplicar'}</p>${!x.voided?`<button class="btn btn-sm" onclick="App.reverseMonthlyContribution('${x.id}')">Anular aportación completa</button>`:''}</details>`).join('')||'<p>Sin aportaciones registradas.</p>'}</details>
+ <details><summary>Historial de pagos</summary>${[...p.payments,...p.providerPayments.map(x=>({...x,kind:'provider'}))].map(x=>`<p>${esc(x.kind==='provider'?'Proveedor':name(x.memberId))} · ${esc(x.kind==='provider'?labels.equipment:labels[x.kind])} · ${fmtDate(x.date)} · ${fmtMoney(x.amount)}${x.voided?' · Anulado':x.contributionId?' · Incluido en aportación mensual':` <button class="btn btn-sm" onclick="App.undoFinancePayment('${x.id}')">Anular abono</button>`}</p>`).join('')}</details>
+ </div></details>`:''}
+ </div><button class="btn btn-ghost" style="margin-top:12px" onclick="App.go('servicios')">Ver renta y servicios ${icon('chevRight')}</button>
+ </div>`;
 }
 function openFinanceSetup(){
  if(accountRole!=='admin')throw Error('Solo el administrador crea el plan');
