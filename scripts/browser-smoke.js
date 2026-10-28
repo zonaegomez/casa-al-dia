@@ -27,6 +27,13 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   assert.ok(uploaded>0);assert.ok(uploaded<=2800000);
 
   await page.evaluate(()=>{const q=window.__qa;q.activate();Object.assign(q.state,{members:[{id:'a',name:'Persona A',color:'#6258E8'},{id:'b',name:'Persona B',color:'#3E6DF6'}],memberId:'a',items:[{id:'rice',name:'Arroz',category:'despensa',unit:'kg',currentQty:2,minQty:1},{id:'coffee',name:'Café',category:'despensa',unit:'paquete',currentQty:0,minQty:0,trackingMode:'simple',stockStatus:'hay'}],movements:[{id:'m',type:'compra',qty:2,total:100,date:'2026-10-19',memberId:'a',memberName:'Persona A',participantIds:['a','b'],category:'despensa',itemName:'Arroz'}],dbMode:'live'});q.render();});
+  await page.evaluate(()=>{App.setThemeAccent('#16856B');App.setThemeMode('dark');});
+  await page.waitForFunction(()=>window.__qa.state.charts.trend?.data.datasets[0].borderColor==='#16856B');
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');assert.equal(await page.locator('.home-stat-grid .home-stat').count(),3);
+  assert.equal(await page.evaluate(()=>window.__qa.state.charts.trend.config.type),'line');
+  await page.evaluate(()=>App.setThemeMode('light'));assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
+  await page.emulateMedia({reducedMotion:'reduce'});await page.evaluate(()=>window.__qa.render());await page.waitForFunction(()=>window.__qa.state.charts.trend?.options.animation===false);
+  await page.emulateMedia({reducedMotion:'no-preference'});await page.evaluate(()=>{App.setThemeAccent('#6258E8');App.setThemeMode('system');});
   for(const surface of ['dashboard','ubicaciones','super','inventario','servicios','cuentas','recordatorios','ciclos','config']){
    await page.evaluate(surface=>App.go(surface),surface);assert.ok((await page.locator('#main').innerText()).trim(),surface);
   }
@@ -41,6 +48,8 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   await page.evaluate(()=>{window.__qa.state.movements=window.__cycleRowsQA;delete window.__cycleRowsQA;});
   await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});await page.getByText('Saldo acumulado de toda la casa.',{exact:false}).waitFor();
   await page.setViewportSize({width:390,height:844});
+  await page.evaluate(()=>App.go('dashboard'));
+  assert.ok(await page.evaluate(()=>{const el=document.querySelector('.home-board');return el.scrollWidth<=el.clientWidth+1;}));
   for(const surface of ['dashboard','inventario','cuentas','config']){await page.evaluate(p=>App.go(p),surface);assert.ok(await page.locator('#main').isVisible());}
   await page.evaluate(source=>{const module={exports:{}};new Function('module',source)(module);const q=window.__qa,seed={'settings/config':{cycleStartDay:1,revision:0,legacyParticipantIds:['a','b']}};for(const coll of ['items','movements'])for(const row of q.state[coll])seed[coll+'/'+row.id]=row;const db=module.exports(seed),base=db.runTransaction;db.runTransaction=async fn=>{const r=await base(fn),snapshot=db.snapshot();for(const coll of ['items','movements'])q.state[coll]=Object.entries(snapshot).filter(([path,v])=>path.startsWith(coll+'/')&&!v.voided).map(([path,v])=>({id:path.split('/')[1],...v}));return r;};q.state.db=db;App.go('inventario');},fs.readFileSync('tests/fake-db.js','utf8'));
   const acceptEdit=dialog=>dialog.accept();page.on('dialog',acceptEdit);
