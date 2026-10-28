@@ -1,4 +1,19 @@
 (function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory;else root.createPurchaseService=factory;})(globalThis,function({store,C,members}){
+ function allocateLinePools(lines,defaultIds){
+  const pools=new Map();
+  for(let i=0;i<lines.length;i++){
+   const selected=[...(lines[i].participantIds||defaultIds)].sort(),key=JSON.stringify(selected);
+   if(!pools.has(key))pools.set(key,{ids:selected,indexes:[],amounts:[]});
+   const pool=pools.get(key);pool.indexes.push(i);pool.amounts.push(C.money(lines[i].total));
+  }
+  const result=lines.map(()=>[]);
+  for(const pool of pools.values()){
+   const total=pool.amounts.reduce((s,n)=>s+C.cents(n),0)/100;
+   const shares=C.allocate(total,pool.ids).map(p=>({memberId:p.memberId,amount:p.cents/100}));
+   C.matrix(shares,pool.amounts).forEach((column,j)=>{result[pool.indexes[j]]=column;});
+  }
+  return result;
+ }
  function plan(input){
   const total=input.lines.reduce((s,l)=>s+C.cents(l.total),0)/100;
   const people=members(),ids=input.participantIds;if(!['normal','dividido','deuda'].includes(input.mode||'normal'))throw Error('Modo de pago inválido');
@@ -15,12 +30,13 @@
    const owed=debts.reduce((s,d)=>s+C.cents(d.amount),0);if(owed>C.cents(total))throw Error('La deuda no puede exceder el gasto');if(!ids.includes(payer)&&owed!==C.cents(total))throw Error('Asigna todo el gasto a los beneficiarios cuando el pagador no participa');
    shares=ids.map(memberId=>({memberId,amount:memberId===payer?(C.cents(total)-owed)/100:(debts.find(d=>d.memberId===memberId)?.amount||0)}));
   }
-  const lineShares=input.lines.map(l=>{
+  const lineIds=input.lines.map(l=>{
    const selected=l.participantIds||ids;
    if(!selected.length||new Set(selected).size!==selected.length||selected.some(id=>!people.some(m=>m.id===id&&m.active!==false)))throw Error('Selecciona participantes válidos en cada producto');
    if(input.mode==='deuda'&&l.participantIds&&JSON.stringify([...selected].sort())!==JSON.stringify([...ids].sort()))throw Error('Para productos con distintos participantes usa el saldo compartido; no una deuda separada');
-   return input.mode==='deuda'?null:C.allocate(l.total,selected).map(p=>({memberId:p.memberId,amount:p.cents/100}));
+   return [...selected].sort();
   });
+  const lineShares=input.mode==='deuda'?input.lines.map(()=>null):allocateLinePools(input.lines.map((l,i)=>({...l,participantIds:lineIds[i]})),ids);
   if(input.mode!=='deuda'){
    const totals=new Map();lineShares.flat().forEach(p=>totals.set(p.memberId,(totals.get(p.memberId)||0)+C.cents(p.amount)));
    shares=[...totals].map(([memberId,n])=>({memberId,amount:n/100}));
@@ -76,7 +92,11 @@
    const total=lines.reduce((s,l)=>s+C.cents(l.total),0)/100;
    const payers=C.proportional(C.cents(total),header.payers.map(p=>C.cents(p.amount))).map((n,i)=>({...header.payers[i],amount:n/100}));
    if(payers.length===1&&patch.memberId&&patch.memberId!==payers[0].memberId){if(header.mode==='deuda')throw Error('No se cambia el acreedor de un adelanto');payers[0]={memberId:patch.memberId,memberName:patch.memberName,amount:total};}
-   if(header.mode!=='deuda')for(const line of lines){line.participantIds=line.participantIds||header.participantIds;line.beneficiaryShares=C.allocate(line.total,line.participantIds).map(p=>({memberId:p.memberId,amount:p.cents/100}));}
+   if(header.mode!=='deuda'){
+    lines.forEach(line=>{line.participantIds=line.participantIds||header.participantIds;});
+    const grouped=allocateLinePools(lines,header.participantIds);
+    lines.forEach((line,i)=>{line.beneficiaryShares=grouped[i];});
+   }
    let shares=C.proportional(C.cents(total),header.beneficiaryShares.map(p=>C.cents(p.amount))).map((n,i)=>({...header.beneficiaryShares[i],amount:n/100}));
    if(header.mode!=='deuda'){const totals=new Map();lines.flatMap(l=>l.beneficiaryShares).forEach(p=>totals.set(p.memberId,(totals.get(p.memberId)||0)+C.cents(p.amount)));shares=[...totals].map(([memberId,n])=>({memberId,amount:n/100}));}
    await write(t,{...header,total,payers,beneficiaryShares:shares,date:patch.date||header.date},lines,header);
