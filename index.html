@@ -3222,7 +3222,7 @@ Object.assign(App,{
 // Each device serializes commands and keeps the form operation ID on retry.
 let commandPending=false;
 for(const [name,fn] of Object.entries(App)){
- if(fn.constructor.name!=='AsyncFunction'&&!name.startsWith('confirmDelete'))continue;
+ if(name==='prepareTicketPhoto'||(fn.constructor.name!=='AsyncFunction'&&!name.startsWith('confirmDelete')))continue;
  App[name]=async function(...args){
   if(commandPending)return;commandPending=true;
   try{return await fn.apply(App,args);}catch(e){console.error(name,e);toast(e.message||'No se pudo guardar. Revisa la conexión y vuelve a intentar.');}finally{commandPending=false;render();}
