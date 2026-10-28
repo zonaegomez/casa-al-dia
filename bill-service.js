@@ -9,6 +9,18 @@
   for(let i=0;i<1200;i++){next=addMonths(anchor,i*step);if(!covered.has(next))break;if(i===1199)throw Error('Calendario demasiado extenso');}
   await t.put('bills',id,{scheduleAnchor:anchor,paymentIds:ids,nextDueDate:next});
  }
+ async function registerReceipt(id,input,meta){return store.atomic(meta,async t=>{
+  const b=await t.get('bills',id);if(!b||b.archived)throw Error('Servicio no disponible');
+  const dueDate=C.date(input.dueDate);if(dueDate!==b.nextDueDate)throw Error('El vencimiento cambió. Reabre el formulario.');
+  const amount=C.money(input.amount);C.number(amount,'Total del recibo',true);
+  const receiptId=id+'-'+dueDate,existing=await t.get('billReceipts',receiptId);
+  if(existing){if(C.cents(existing.amount)!==C.cents(amount))throw Error('El recibo ya tiene un importe confirmado');return receiptId;}
+  if((b.history||[]).length)throw Error('Migra y concilia el historial antes de registrar recibos nuevos');
+  const ids=b.participantIds||(members?C.participants(members()):[]),beneficiaryShares=C.billShares(b,amount,ids);
+  if(!beneficiaryShares.length||beneficiaryShares.some(p=>!(members?members():[]).some(m=>m.id===p.memberId&&m.active!==false)))throw Error('Revisa los integrantes activos del servicio');
+  await t.put('billReceipts',receiptId,{billId:id,name:b.name,amount,dueDate,period:dueDate.slice(0,7),participantIds:beneficiaryShares.map(p=>p.memberId),beneficiaryShares},false);
+  return receiptId;
+ });}
  async function pay(id,input,meta){return store.atomic(meta,async t=>{
   const b=await t.get('bills',id);if(!b||b.archived)throw Error('Servicio no disponible');
   const dueDate=C.date(input.dueDate||b.nextDueDate);if(dueDate!==b.nextDueDate)throw Error('El vencimiento cambió. Reabre el formulario para confirmar el recibo vigente.');
@@ -37,5 +49,6 @@
   if(p.receiptId){if(!patch.voided)throw Error('Para corregir una aportación, anúlala y captura la correcta');const receipt=await t.get('billReceipts',p.receiptId);if(!receipt)throw Error('Falta el recibo de origen');}
   const next={...p,...patch};await t.put('billPayments',pid,next,false);await schedule(t,b,billId,pid,next);
  });}
- return {pay,edit};
+ return {registerReceipt,pay,edit};
 });
+

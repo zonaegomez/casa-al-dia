@@ -1597,6 +1597,7 @@ function billCard(b){
     else status = `<span class="badge badge-good"><span class="dot dot-good"></span>Al día</span>`;
   }
   const receipt=(state.billReceipts||[]).find(r=>r.billId===b.id&&r.dueDate===b.nextDueDate),progress=receipt?CasaCore.receiptProgress(receipt,billPayments):null;
+  if(progress&&progress.pending===receipt.amount)status=`<span class="badge badge-warn">Pendiente · ${d<0?'vencido':d===0?'vence hoy':'aún no vence'}</span>`;
   if(progress&&progress.pending>0&&progress.pending<receipt.amount)status=`<span class="badge badge-warn">Pago parcial · ${d<0?'vencido':d===0?'vence hoy':'aún no vence'}</span>`;
   const lastPaid = (b.history||[]).slice().sort((x,y)=>(y.paidAt||'').localeCompare(x.paidAt||''))[0];
   return `<div class="bill-card">
@@ -1612,7 +1613,7 @@ function billCard(b){
     ${receipt?'<div style="margin:10px 0">'+progress.members.map(p=>'<div class="bill-meta">'+esc(state.members.find(m=>m.id===p.memberId)?.name||'Integrante')+': '+fmtMoney(p.paid)+' de '+fmtMoney(p.owed)+' · '+Math.round(p.percent)+'%'+(p.credit?' · adelantó '+fmtMoney(p.credit):'')+'</div>').join('')+'</div>':''}
     <div class="bill-meta">${b.nextDueDate? 'Próximo pago: '+fmtDate(b.nextDueDate,{day:'numeric',month:'long'}) : 'Sin próxima fecha'}${lastPaid?' · último pago '+fmtDate(lastPaid.paidAt):''}</div>
     <div class="bill-actions">
-      <button class="btn btn-sm btn-primary" onclick="App.openPayBill('${b.id}')">Registrar aportación</button>
+      <button class="btn btn-sm btn-primary" onclick="App.openPayBill('${b.id}')">${receipt?'Registrar aportación':'Registrar recibo'}</button>
       <button class="btn btn-sm btn-ghost" onclick="App.openBillHistory('${b.id}')" title="Historial de pagos">${icon('chart')}</button>
       <button class="btn btn-sm btn-ghost" onclick="App.openBillForm('${b.id}')" title="Editar servicio">${icon('edit')}</button>
       <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteBill('${b.id}')" title="Eliminar servicio">${icon('trash')}</button>
@@ -2321,9 +2322,16 @@ function billAllocationFields(b){
  '<fieldset class="field"><legend>Participantes del servicio</legend>'+activeMembers().map(m=>'<label style="display:block"><input class="bl-beneficiary" type="checkbox" value="'+m.id+'" '+(ids.includes(m.id)?'checked':'')+'> '+esc(m.name)+'</label>').join('')+'</fieldset>'+
  '<div id="blQuotas" '+(b?.splitPolicy==='fixed'?'':'hidden')+'><p>Las cuotas deben sumar el total. Se conservarán en cada recibo.</p>'+activeMembers().map(m=>'<div class="field"><label>'+esc(m.name)+'</label><input class="bl-quota" data-member="'+m.id+'" type="number" min="0" step="0.01" value="'+(b?.fixedShares?.find(p=>p.memberId===m.id)?.amount||0)+'"></div>').join('')+'</div>';
 }
+function modalRegisterReceipt(id){
+ const b=state.bills.find(x=>x.id===id);if(!b)return;
+ openModal(`<div class="modal-header"><h3>Registrar recibo · ${esc(b.name)}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div><div class="modal-body"><p>Captura el importe completo para saber cuánto le toca a cada quien. Esto no registra ningún pago.</p><div class="field"><label>Total real del recibo (MXN)</label><input id="receiptAmount" type="number" min="0.01" step="0.01" value="${b.amountType==='variable'?'':b.amountEstimate||''}" oninput="App.previewReceiptShares('${id}')"></div><div class="field"><label>Vencimiento del recibo</label><input id="receiptDueDate" type="date" readonly value="${b.nextDueDate}"></div><div id="receiptSharesPreview" aria-live="polite"></div><p>Después podrás registrar las aportaciones por separado.</p></div><div class="modal-foot"><button class="btn btn-primary" onclick="App.saveReceipt('${id}')">Guardar recibo</button></div>`);
+ App.previewReceiptShares(id);
+}
+
 function modalPayBill(id){
   const b = state.bills.find(x=>x.id===id);
   if(!b) return;
+  if(!state.billReceipts.some(r=>r.billId===id&&r.dueDate===b.nextDueDate)){modalRegisterReceipt(id);return;}
   const members = activeMembers().slice().sort((a,b)=>a.name.localeCompare(b.name));
   const receipt=state.billReceipts.find(r=>r.billId===id&&r.dueDate===b.nextDueDate),progress=receipt?CasaCore.receiptProgress(receipt,billPayments):null;
   openModal(`
@@ -2703,6 +2711,8 @@ window.App = {
     closeModal(); toast('Servicio guardado'); render();
   },
   openPayBill(id){ modalPayBill(id); },
+  previewReceiptShares(id){const el=document.getElementById('receiptSharesPreview'),b=state.bills.find(x=>x.id===id);if(!el||!b)return;try{const amount=CasaCore.money(document.getElementById('receiptAmount').value);CasaCore.number(amount,'Total',true);const shares=CasaCore.billShares(b,amount,b.participantIds||participants());el.innerHTML='<strong>A cada quien le corresponde:</strong>'+shares.map(p=>'<div>'+esc(state.members.find(m=>m.id===p.memberId)?.name||'Integrante')+': '+fmtMoney(p.amount)+'</div>').join('');}catch(e){el.textContent='Captura un total válido para calcular las cuotas.';}},
+  async saveReceipt(id){await BillService.registerReceipt(id,{amount:CasaCore.money(document.getElementById('receiptAmount').value),dueDate:document.getElementById('receiptDueDate').value},operationMeta('register-receipt'));closeModal();toast('Recibo registrado. Las cuotas están listas; todavía no se ha registrado ningún pago.');},
   toggleBillPaymentSplit(){
     const toggle = document.getElementById('paySplitToggle');
     const on = toggle && toggle.checked;
