@@ -2180,26 +2180,20 @@ function ticketRowHtml(items, itemId, freeName, cost){
   const isFree = !itemId || itemId==='__free__';
   const freeCats = INVENTORY_CATS.concat(['servicio','otro']);
   const members=activeMembers().slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const displayName=isFree?(freeName||''):(items.find(it=>it.id===itemId)?.name||freeName||'');
   return `<div class="ticket-row" id="${rowId}" style="display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
     <div style="display:grid; grid-template-columns:minmax(0,2fr) minmax(100px,1fr) auto; align-items:end; gap:8px;">
-      <div class="field" style="min-width:0; margin:0;"><label>Producto</label>
-        <select class="tkItem" onchange="App.onTicketItemChange('${rowId}')">
-          <option value="__free__" ${isFree?'selected':''}>— Otro / no vincular a inventario —</option>
-          ${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}
-        </select>
-      </div>
+      <div class="field" style="min-width:0; margin:0;"><label>Producto</label><input class="tkDisplayName" value="${esc(displayName)}" placeholder="Nombre del producto"></div>
       <div class="field" style="min-width:0; margin:0;"><label>Total (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="${cost!=null?cost:0}" oninput="App.updateTicketTotal()"></div>
       <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
-    </div>
-    <div class="tkFreeFields" style="display:${isFree?'flex':'none'}; gap:8px;">
-      <div class="field" style="flex:2; min-width:0; margin:0;"><label>Nombre del producto</label><input class="tkFreeName" value="${esc(freeName||'')}" placeholder="Ej. Jitomate a granel"></div>
     </div>
     <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:end; gap:8px;">
       <div class="field" style="margin:0;"><label>¿A quién le corresponde?</label><select class="tkDistribution" onchange="App.onTicketDistributionChange('${rowId}')"><option value="grupal">Grupal · todos comparten</option><option value="individual">Individual · una persona</option><option value="personalizado">Reparto personalizado</option></select></div>
       <div class="field tkIndividualWrap" style="display:none; margin:0;"><label>Persona</label><select class="tkIndividualMember">${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></div>
     </div>
     <div class="tkCustomPeople" hidden>${members.map(m=>'<label style="display:inline-flex;align-items:center;margin:0 12px 4px 0"><input type="checkbox" class="tk-line-beneficiary" value="'+m.id+'" checked> '+esc(m.name)+'</label>').join('')}</div>
-    <details><summary>Inventario y más opciones</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin-top:8px;">
+    <details><summary>Inventario y cantidad (opcional)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin-top:8px;">
+      <div class="field" style="margin:0;"><label>Vincular producto</label><select class="tkItem" onchange="App.onTicketItemChange('${rowId}')"><option value="__free__" ${isFree?'selected':''}>Sin inventario</option>${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}</select></div>
       <div class="field" style="margin:0;"><label>Cantidad comprada</label><input class="tkQty" type="number" step="any" min="0" value="1"></div>
       <div class="field" style="margin:0;"><label>Unidades por paquete</label><input class="tkPack" type="number" min="1" step="1" value="1"><small>Sueltas: 1 · paquete de 30: 30.</small></div>
       <div class="field tkFreeCategory" style="display:${isFree?'':'none'};margin:0;"><label>Categoría</label><select class="tkFreeCat">${freeCats.map(c=>`<option value="${c}" ${c==='despensa'?'selected':''}>${CATS[c]?CATS[c].label:cap(c)}</option>`).join('')}</select></div>
@@ -2594,9 +2588,9 @@ window.App = {
     const row = document.getElementById(rowId);
     if(!row) return;
     const sel = row.querySelector('.tkItem');
-    const freeFields = row.querySelector('.tkFreeFields');
     const freeCategory = row.querySelector('.tkFreeCategory');
-    if(freeFields) freeFields.style.display = sel.value==='__free__' ? 'flex' : 'none';
+    const displayName=row.querySelector('.tkDisplayName'),item=state.items.find(i=>i.id===sel.value);
+    if(item&&displayName)displayName.value=item.name;
     if(freeCategory) freeCategory.style.display = sel.value==='__free__' ? '' : 'none';
     const pack=row.querySelector('.tkPack');if(pack)pack.value='1';
   },
@@ -3078,7 +3072,7 @@ Object.assign(App,{
  const lines=[...document.querySelectorAll('.ticket-row')].map(row=>{
   const type=row.querySelector('.tkDistribution')?.value||'grupal';
   const participantIds=type==='individual'?[row.querySelector('.tkIndividualMember')?.value].filter(Boolean):type==='personalizado'?[...row.querySelectorAll('.tk-line-beneficiary:checked')].map(x=>x.value):(globalNodes.length?globalIds:participants());
-  return {participantIds,itemId:row.querySelector('.tkItem').value==='__free__'?null:row.querySelector('.tkItem').value,qty:CasaCore.number(row.querySelector('.tkQty').value,'Cantidad',true),unitsPerPack:Number(row.querySelector('.tkPack')?.value||1),total:CasaCore.money(row.querySelector('.tkCost').value),itemName:row.querySelector('.tkFreeName')?.value.trim()||'',category:row.querySelector('.tkFreeCat')?.value||'despensa'};
+  return {participantIds,itemId:row.querySelector('.tkItem').value==='__free__'?null:row.querySelector('.tkItem').value,qty:CasaCore.number(row.querySelector('.tkQty').value,'Cantidad',true),unitsPerPack:Number(row.querySelector('.tkPack')?.value||1),total:CasaCore.money(row.querySelector('.tkCost').value),itemName:row.querySelector('.tkDisplayName')?.value.trim()||'',category:row.querySelector('.tkFreeCat')?.value||'despensa'};
  });
  const total=lines.reduce((s,l)=>s+CasaCore.cents(l.total),0)/100,expected=document.getElementById('tkExpectedTotal');
  if(expected&&CasaCore.cents(expected.value)!==CasaCore.cents(total))throw Error('Las líneas no coinciden con el total pagado del ticket');
