@@ -75,17 +75,28 @@
    await write(t,header,lines);return t.id;
   });
  }
+ function editParticipants(ids,previous){
+  if(!Array.isArray(ids)||!ids.length||ids.length>20||new Set(ids).size!==ids.length||ids.some(id=>!members().some(m=>m.id===id&&(m.active!==false||previous.includes(id)))))throw Error('Selecciona al menos una persona válida para este producto');
+  return [...ids].sort();
+ }
  async function edit(id,patch,meta){
   return store.atomic(meta,async t=>{
    const target=await t.get('movements',id);if(!target||target.voided)throw Error('Movimiento no disponible');
    const header=target.purchaseId?await t.get('purchases',target.purchaseId):null;
+   if(target.purchaseId&&!header)throw Error('Falta la cabecera de la compra; requiere conciliación');
+   const previousIds=target.participantIds||header?.participantIds||t.config.legacyParticipantIds||[];
+   if(Object.prototype.hasOwnProperty.call(patch,'participantIds')){
+    patch={...patch,participantIds:editParticipants(patch.participantIds,previousIds)};
+    if((target.debtFronted||header?.mode==='deuda')&&JSON.stringify([...previousIds].sort())!==JSON.stringify(patch.participantIds))throw Error('Este adelanto tiene deudas vinculadas; concílialas antes de cambiar el reparto');
+   }
    if(!header){
     if(target.debtFronted)throw Error('Adelanto antiguo sin vínculo verificable. Concilia sus deudas antes de modificarlo.');
     const total=C.money(patch.total),oldPaid=target.splits?.length?target.splits:[{memberId:target.memberId,memberName:target.memberName,amount:target.total}];
     const paid=C.proportional(C.cents(total),oldPaid.map(p=>C.cents(p.amount))).map((n,i)=>({...oldPaid[i],amount:n/100}));
     if(paid.length===1&&patch.memberId)paid[0]={...paid[0],memberId:patch.memberId,memberName:patch.memberName};
-    const ids=target.participantIds||t.config.legacyParticipantIds;if(!ids?.length)throw Error('Falta acordar el reparto histórico');
-    await t.put('movements',id,{...patch,total,unitCost:total/target.qty,splits:paid,memberId:paid.length===1?paid[0].memberId:null,memberName:paid.length===1?paid[0].memberName||'Integrante':'Varios integrantes',participantIds:ids});return;
+    const ids=patch.participantIds||target.participantIds||t.config.legacyParticipantIds;if(!ids?.length)throw Error('Falta acordar el reparto histórico');
+    const beneficiaryShares=patch.participantIds||C.cents(total)!==C.cents(target.total)?C.allocate(total,ids).map(p=>({memberId:p.memberId,amount:p.cents/100})):(target.beneficiaryShares||C.allocate(total,ids).map(p=>({memberId:p.memberId,amount:p.cents/100})));
+    await t.put('movements',id,{...patch,total,unitCost:total/target.qty,splits:paid,memberId:paid.length===1?paid[0].memberId:null,memberName:paid.length===1?paid[0].memberName||'Integrante':'Varios integrantes',participantIds:ids,beneficiaryShares});return;
    }
    if(header.voided)throw Error('Compra anulada');const lines=[];
    for(const lineId of header.lineIds){const line=await t.get('movements',lineId);if(!line||line.voided)throw Error('La compra requiere conciliación por líneas faltantes');lines.push({...line,id:lineId,...(lineId===id?patch:{})});}
@@ -99,7 +110,7 @@
    }
    let shares=C.proportional(C.cents(total),header.beneficiaryShares.map(p=>C.cents(p.amount))).map((n,i)=>({...header.beneficiaryShares[i],amount:n/100}));
    if(header.mode!=='deuda'){const totals=new Map();lines.flatMap(l=>l.beneficiaryShares).forEach(p=>totals.set(p.memberId,(totals.get(p.memberId)||0)+C.cents(p.amount)));shares=[...totals].map(([memberId,n])=>({memberId,amount:n/100}));}
-   await write(t,{...header,total,payers,beneficiaryShares:shares,date:patch.date||header.date},lines,header);
+   await write(t,{...header,total,payers,participantIds:shares.map(p=>p.memberId),beneficiaryShares:shares,date:patch.date||header.date},lines,header);
   });
  }
  async function voidPurchase(id,meta){

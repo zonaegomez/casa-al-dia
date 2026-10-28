@@ -34,6 +34,25 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   await page.setViewportSize({width:390,height:844});
   for(const surface of ['dashboard','inventario','cuentas','config']){await page.evaluate(p=>App.go(p),surface);assert.ok(await page.locator('#main').isVisible());}
   await page.evaluate(source=>{const module={exports:{}};new Function('module',source)(module);const q=window.__qa,seed={'settings/config':{cycleStartDay:1,revision:0,legacyParticipantIds:['a','b']}};for(const coll of ['items','movements'])for(const row of q.state[coll])seed[coll+'/'+row.id]=row;const db=module.exports(seed),base=db.runTransaction;db.runTransaction=async fn=>{const r=await base(fn),snapshot=db.snapshot();for(const coll of ['items','movements'])q.state[coll]=Object.entries(snapshot).filter(([path,v])=>path.startsWith(coll+'/')&&!v.voided).map(([path,v])=>({id:path.split('/')[1],...v}));return r;};q.state.db=db;App.go('inventario');},fs.readFileSync('tests/fake-db.js','utf8'));
+  const acceptEdit=dialog=>dialog.accept();page.on('dialog',acceptEdit);
+  await page.evaluate(()=>App.openEditMovement('m'));
+  assert.equal(await page.locator('.em-beneficiary:checked').count(),2);
+  await page.locator('.em-beneficiary[value="a"]').uncheck();
+  await page.getByText('Parte de este producto: Persona B $100.00',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();
+  await page.waitForFunction(()=>JSON.stringify(window.__qa.state.movements.find(m=>m.id==='m').participantIds)==='["b"]');
+  assert.equal(await page.evaluate(()=>window.__qa.state.items.find(i=>i.id==='rice').currentQty),2);
+  await page.evaluate(()=>App.openEditMovement('m'));
+  assert.equal(await page.locator('.em-beneficiary[value="a"]').isChecked(),false);
+  assert.equal(await page.locator('.em-beneficiary[value="b"]').isChecked(),true);
+  await page.locator('.em-beneficiary[value="b"]').uncheck();
+  await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();
+  await page.getByText('Selecciona al menos una persona para este producto',{exact:true}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.__qa.state.movements.find(m=>m.id==='m').participantIds),['b']);
+  await page.locator('.em-beneficiary[value="a"]').check();await page.locator('.em-beneficiary[value="b"]').check();
+  await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();
+  await page.waitForFunction(()=>window.__qa.state.movements.find(m=>m.id==='m').participantIds.length===2);
+  page.off('dialog',acceptEdit);
   await page.evaluate(()=>{window.__qa.state.items.find(i=>i.id==='rice').unit='rollo';window.__qa.render();});assert.ok(await page.getByRole('button',{name:'Saqué 1 rollo',exact:true}).isVisible());await page.evaluate(()=>{window.__qa.state.items.find(i=>i.id==='rice').unit='kg';window.__qa.render();});await page.getByRole('button',{name:'Usé 1 kg',exact:true}).click();await page.getByText('Quedan 1.',{exact:false}).waitFor();assert.equal(await page.evaluate(()=>window.__qa.state.items.find(i=>i.id==='rice').currentQty),1);await page.getByRole('button',{name:'Deshacer',exact:true}).click();await page.waitForFunction(()=>window.__qa.state.items.find(i=>i.id==='rice').currentQty===2);
   await page.getByRole('button',{name:'Se acabó',exact:true}).click();await page.waitForFunction(()=>window.__qa.state.items.find(i=>i.id==='coffee').stockStatus==='comprar');await page.evaluate(()=>App.go('super'));assert.ok((await page.locator('#main').innerText()).includes('Café'));await page.evaluate(()=>App.go('inventario'));await page.getByRole('button',{name:'Hay',exact:true}).click();await page.waitForFunction(()=>window.__qa.state.items.find(i=>i.id==='coffee').stockStatus==='hay');
   await page.getByRole('button',{name:'Más opciones',exact:true}).click();assert.equal(await page.locator('#mvDate').isVisible(),false);assert.equal(await page.locator('#mvNote').isVisible(),false);await page.locator('#modalRoot details summary').click();assert.ok(await page.locator('#mvDate').isVisible());assert.ok(await page.locator('#mvNote').isVisible());await page.evaluate(()=>App.closeModal());await page.evaluate(()=>App.openItemForm(null));assert.equal(await page.locator('#itTracking').inputValue(),'simple');assert.equal(await page.locator('#itQuantityWrap').isVisible(),false);await page.evaluate(()=>App.closeModal());

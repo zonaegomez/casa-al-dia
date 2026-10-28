@@ -2188,7 +2188,7 @@ function ticketRowHtml(items, itemId, freeName, cost){
       <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
     </div>
     <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:end; gap:8px;">
-      <div class="field" style="margin:0;"><label>¿A quién le corresponde?</label><select class="tkDistribution" onchange="App.onTicketDistributionChange('${rowId}')"><option value="grupal">Grupal · todos comparten</option><option value="individual">Individual · una persona</option><option value="personalizado">Reparto personalizado</option></select></div>
+      <div class="field" style="margin:0;"><label>¿Para quién es este producto?</label><select class="tkDistribution" onchange="App.onTicketDistributionChange('${rowId}')"><option value="grupal">Para la casa</option><option value="individual">Una persona</option><option value="personalizado">Dos o más personas</option></select></div>
       <div class="field tkIndividualWrap" style="display:none; margin:0;"><label>Persona</label><select class="tkIndividualMember">${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></div>
     </div>
     <div class="tkCustomPeople" hidden>${members.map(m=>'<label style="display:inline-flex;align-items:center;margin:0 12px 4px 0"><input type="checkbox" class="tk-line-beneficiary" value="'+m.id+'" checked> '+esc(m.name)+'</label>').join('')}</div>
@@ -2269,17 +2269,24 @@ function modalManualExpense(){
 function modalEditMovement(id){
   const m = state.movements.find(x=>x.id===id);
   if(!m){ toast('No se encontró ese gasto'); return; }
-  const members = activeMembers().slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const selectedIds=m.participantIds||state.purchases.find(p=>p.id===m.purchaseId)?.participantIds||state.settings.legacyParticipantIds||participants();
+  const members=state.members.filter(mb=>mb.active!==false||selectedIds.includes(mb.id)||mb.id===m.memberId).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const locked=m.debtFronted||state.purchases.find(p=>p.id===m.purchaseId)?.mode==='deuda';
   openModal(`
-    <div class="modal-header"><h3>Editar gasto</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-header"><h3>${m.purchaseId?'Editar producto del ticket':'Editar gasto'}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
       <div class="field"><label>Concepto</label><input id="emName" value="${esc(m.itemName||'')}" placeholder="Ej. Ferretería, reparación…"></div>
       <div class="field-row">
         <div class="field"><label>Categoría</label><select id="emCat">${Object.keys(CATS).map(c=>`<option value="${c}" ${c===m.category?'selected':''}>${CATS[c].label}</option>`).join('')}</select></div>
-        <div class="field"><label>Monto (MXN)</label><input id="emAmount" type="number" step="any" min="0" value="${Number(m.total)||0}"></div>
+        <div class="field"><label>Monto (MXN)</label><input id="emAmount" type="number" step="any" min="0" value="${Number(m.total)||0}" oninput="App.previewEditedProductShares()"></div>
       </div>
-      <div class="field"><label>Fecha</label><input id="emDate" type="date" value="${m.date||todayISO()}"></div>
-      <div class="field"><label>¿Quién lo pagó?</label>
+      <fieldset class="field" ${locked?'disabled':''}><legend>¿Para quién es este producto?</legend>
+        ${members.filter(mb=>mb.active!==false||selectedIds.includes(mb.id)).map(mb=>`<label style="display:block"><input type="checkbox" class="em-beneficiary" value="${mb.id}" ${selectedIds.includes(mb.id)?'checked':''} onchange="App.previewEditedProductShares()"> ${esc(mb.name)}${mb.active===false?' (inactivo)':''}</label>`).join('')}
+        <small>${locked?'Este adelanto tiene deudas vinculadas. Requiere conciliarlas antes de cambiar su reparto.':'Elige una persona, una pareja o todos. Solo cambia el reparto de este producto; los demás conservan el suyo.'}</small>
+      </fieldset>
+      <div id="emSharesPreview" data-locked="${locked?'true':'false'}" role="status" aria-live="polite"></div>
+      <div class="field"><label>Fecha del ticket</label><input id="emDate" type="date" value="${m.date||todayISO()}"></div>
+      <div class="field"><label>¿Quién pagó el ticket?</label>
         <select id="emMember" ${m.splits&&m.splits.length>1?'disabled title="Las aportaciones múltiples se conservan y ajustan proporcionalmente"':''}>
           <option value="" ${!m.memberId?'selected':''}>— Sin asignar —</option>
           ${members.map(mb=>`<option value="${mb.id}" ${mb.id===m.memberId?'selected':''}>${esc(mb.name)}</option>`).join('')}
@@ -2291,6 +2298,7 @@ function modalEditMovement(id){
       <button class="btn btn-primary" onclick="App.saveEditMovement('${id}')">Guardar cambios</button>
     </div>
   `);
+  App.previewEditedProductShares();
 }
 
 function modalBillForm(id){
@@ -3095,14 +3103,26 @@ Object.assign(App,{
  const funding=readFunding('me',total);
  await Purchases.create({date:document.getElementById('meDate').value||todayISO(),store:'',concept:name,lines:[{itemId:null,itemName:name,category:document.getElementById('meCat').value,qty:1,total}],...funding},operationMeta('manual-expense'));closeModal();toast('Gasto registrado');
  },
+ previewEditedProductShares(){
+  const el=document.getElementById('emSharesPreview');if(!el)return;
+  if(el.dataset?.locked==='true'){el.textContent='Las cuotas del adelanto vinculado se conservan.';return;}
+  try{
+   const ids=[...document.querySelectorAll('.em-beneficiary:checked')].map(x=>x.value);
+   if(!ids.length)throw Error('Selecciona al menos una persona.');
+   const amount=CasaCore.money(document.getElementById('emAmount').value);
+   CasaCore.number(amount,'Monto',true);
+   el.innerHTML='<p>Parte de este producto: '+CasaCore.allocate(amount,ids).map(p=>esc(state.members.find(m=>m.id===p.memberId)?.name||'Integrante')+' '+fmtMoney(p.cents/100)).join(' · ')+'</p><small>El resumen del ticket se recalcula al guardar. Puede ajustar un centavo entre productos compartidos para que el total cuadre.</small>';
+  }catch(e){el.textContent=e.message;}
+ },
  async saveEditMovement(id){
   const name=document.getElementById('emName').value.trim();if(!name)throw Error('Describe el gasto');
   const total=CasaCore.money(document.getElementById('emAmount').value);CasaCore.number(total,'Monto',true);
   const memberId=document.getElementById('emMember').value,mem=state.members.find(m=>m.id===memberId);const current=state.movements.find(m=>m.id===id);if(!mem&&!current?.splits?.length)throw Error('Selecciona quién pagó');
   const date=document.getElementById('emDate').value,category=document.getElementById('emCat').value;
+  const participantIds=[...document.querySelectorAll('.em-beneficiary:checked')].map(x=>x.value);if(!participantIds.length)throw Error('Selecciona al menos una persona para este producto');
   const old=state.movements.find(m=>m.id===id);
-  if((old?.purchaseId||old?.splits?.length)&&!confirm('Se conciliará toda la compra: aportaciones y deudas sin abonos se ajustan proporcionalmente. La fecha se aplica a todo el ticket. ¿Continuar?'))return;
-  await Purchases.edit(id,{itemName:name,total,date,category,memberId:mem?.id||current.memberId||null,memberName:mem?.name||current.memberName||'Varios integrantes'},operationMeta('correct-expense'));closeModal();toast('Compra y obligaciones conciliadas');
+  if((old?.purchaseId||old?.splits?.length)&&!confirm('Se recalculará el reparto del ticket conservando el de los demás productos. Si cambias quién pagó o la fecha, se aplica a todo el ticket. Las existencias no cambian. ¿Continuar?'))return;
+  await Purchases.edit(id,{itemName:name,total,date,category,participantIds,memberId:mem?.id||current.memberId||null,memberName:mem?.name||current.memberName||'Varios integrantes'},operationMeta('correct-expense'));closeModal();toast('Compra y obligaciones conciliadas');
  },
  async confirmDeleteMovement(id){
  if(!confirm('¿Anular la compra completa, revertir sus existencias y cancelar sus deudas sin abonos?'))return;
