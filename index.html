@@ -2239,6 +2239,7 @@ function modalTicket(prefillItemIds, scannedLines, scanMeta){
       ${beneficiaryFields('tk','¿Quiénes comparten los productos grupales?')}
       ${shareModeSectionHtml('tk', activeMembers().slice().sort((a,b)=>a.name.localeCompare(b.name)), currentMember())}
     </div>
+    <div id="tkDuplicateWarning" hidden role="alert" tabindex="-1" style="padding:16px;border:2px solid var(--warn);border-radius:12px;margin:12px"></div>
     <div class="modal-foot"><button class="btn btn-primary" onclick="App.saveTicket()">Guardar ticket</button></div>
   `);
   App.updateTicketTotal();
@@ -3094,7 +3095,14 @@ Object.assign(App,{
  });
  const total=lines.reduce((s,l)=>s+CasaCore.cents(l.total),0)/100,expected=document.getElementById('tkExpectedTotal');
  if(expected&&CasaCore.cents(expected.value)!==CasaCore.cents(total))throw Error('Las líneas no coinciden con el total pagado del ticket');
- await Purchases.create({date,store:document.getElementById('tkStore')?.value.trim()||'',concept:document.getElementById('tkConcept')?.value.trim()||'Ticket de compra',kind:document.getElementById('tkKind')?.value||'despensa',lines,...readFunding('tk',total)},operationMeta('purchase-ticket'));
+ try{
+  await Purchases.create({date,store:document.getElementById('tkStore')?.value.trim()||'',concept:document.getElementById('tkConcept')?.value.trim()||'Ticket de compra',kind:document.getElementById('tkKind')?.value||'despensa',lines,...readFunding('tk',total),allowDuplicate:document.getElementById('tkAllowDuplicate')?.checked===true,duplicateToken:document.getElementById('tkDuplicateToken')?.value||''},operationMeta('purchase-ticket'));
+ }catch(e){
+  if(e.code!=='DUPLICATE_TICKET')throw e;
+  const warning=document.getElementById('tkDuplicateWarning');if(!warning)throw e;
+  warning.innerHTML='<strong>Posible ticket duplicado</strong><p>Ya hay compras con la misma fecha e importe y una tienda compatible:</p>'+e.matches.map(p=>'<p>'+esc(p.store||'Sin tienda')+' · '+fmtDate(p.date)+' · '+fmtMoney(p.total)+' · '+p.productCount+' producto(s)</p>').join('')+'<p>Registrarlo otra vez sumará nuevamente el gasto y los productos vinculados al inventario. Si es la misma compra, cierra este formulario.</p><label><input id="tkAllowDuplicate" type="checkbox"> Confirmo que quiero registrar este ticket otra vez.</label><input id="tkDuplicateToken" type="hidden" value="'+esc(e.duplicateToken)+'"><p>Después de confirmar, pulsa Guardar ticket. Si corriges los datos, se comprobarán nuevamente.</p>';
+  warning.hidden=false;warning.focus?.();warning.scrollIntoView?.({block:'center',behavior:'smooth'});return;
+ }
  closeModal();toast('Ticket completo registrado');
  },
  async saveManualExpense(){
@@ -3233,7 +3241,7 @@ Object.assign(App,{
  },
  explainBalance(memberId){
   const row=computeBalances().balances.find(r=>r.member.id===memberId);if(!row)return;
-  const adjustment=CasaCore.money(row.balance-row.paid+row.fairShare);
+  const adjustment=(Math.round(row.balance*100)-Math.round(row.paid*100)+Math.round(row.fairShare*100))/100;
   const lines=allExpenseRows().filter(r=>!r.debtFronted).map(r=>{const part=CasaCore.balances([r],state.members,[]).balances.find(b=>b.member.id===memberId);return {r,part};}).filter(x=>x.part&&(x.part.paid||x.part.fairShare));
   openModal(`<div class="modal-header"><h3>Cuenta de ${esc(row.member.name)}</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body"><p>Dinero que pagaste en compras y servicios: <strong>${fmtMoney(row.paid)}</strong></p><p>Tu parte de esos gastos: <strong>${fmtMoney(row.fairShare)}</strong></p><p>Ajuste por transferencias entre integrantes: <strong>${adjustment>=0?'+':''}${fmtMoney(adjustment)}</strong></p><p>Pagaste − te correspondía + ajuste = <strong>${row.balance<0?'Te toca pagar ':row.balance>0?'Tienes a favor ':'Sin pendiente '}${fmtMoney(Math.abs(row.balance))}</strong></p><p>Una transferencia que envías reduce lo que debes; una que recibes reduce lo que te debían. Los préstamos privados van por separado.</p><details><summary>Ver cada compra y servicio</summary>${lines.map(({r,part})=>'<p>'+esc(r.name)+' · '+fmtDate(r.date)+'<br>Pagaste '+fmtMoney(part.paid)+' · te corresponde '+fmtMoney(part.fairShare)+'</p>').join('')}</details></div>`);
  }

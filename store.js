@@ -32,6 +32,7 @@
       const receipt=db.collection('operations').doc(id);const oldReceipt=await tx.get(receipt);
       if(oldReceipt.exists)return oldReceipt.data().result;
       const configRef=db.doc('settings/config');const configSnap=await tx.get(configRef);const config=configSnap.exists?configSnap.data():{cycleStartDay:1,currency:'MXN',householdName:'Mi Casa'};
+      if(meta.expectedRevision!==undefined&&Number(config.revision||0)!==meta.expectedRevision){const e=Error('El historial cambió mientras revisabas el ticket. Pulsa Guardar otra vez para comprobar duplicados.');e.code='LEDGER_CHANGED';throw e;}
       const cache=new Map([['settings/config',config]]),writes=new Map(),before=new Map();
       const dates=new Set(meta.dates||[]);let touchesFinancial=false;
       async function get(coll,key){const path=coll+'/'+key;if(cache.has(path))return cache.get(path);const snap=await tx.get(db.doc(path));const value=snap.exists?snap.data():null;cache.set(path,value);return value;}
@@ -79,5 +80,18 @@
   async function add(coll,data,meta={}){const id=newId();return atomic(meta,async t=>{await t.put(coll,id,data,false);return id;});}
   async function set(coll,id,data,merge=true){return atomic({},t=>t.put(coll,id,data,merge).then(()=>null));}
   async function del(coll,id){return atomic({},t=>t.remove(coll,id));}
-  return {atomic,add,set,del,setSettings:(data,merge)=>set('settings','config',data,merge)};
+  async function ticketCandidates(date,operationId){
+    if(!ready()||!actor())throw Error('Espera a que la conexión esté sincronizada');
+    C.date(date);const db=database();
+    if(operationId){const op=await db.doc('operations/'+operationId).get({source:'server'});if(op.exists)return {operation:{result:op.data().result}};}
+    const config=await db.doc('settings/config').get({source:'server'});
+    const revision=Number(config.exists?config.data().revision||0:0);
+    const [headers,lines]=await Promise.all([
+      db.collection('purchases').where('date','==',date).get({source:'server'}),
+      db.collection('movements').where('date','==',date).get({source:'server'})
+    ]);
+    const rows=snap=>snap.docs.map(d=>({...d.data(),id:d.id}));
+    return {revision,purchases:rows(headers),movements:rows(lines)};
+  }
+  return {atomic,add,set,del,ticketCandidates,setSettings:(data,merge)=>set('settings','config',data,merge)};
 });

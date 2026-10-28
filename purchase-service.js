@@ -61,9 +61,38 @@
   for(const id of old?.debtIds||[])if(!debtIds.includes(id)){const d=await t.get('debts',id);if(d?.payments?.length)throw Error('El adelanto tiene abonos');await t.put('debts',id,{voided:true});}
   await t.put('purchases',header.id,{...header,debtIds,lineIds:lines.map(l=>l.id)},false);
  }
+ function normalizedStore(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+ function duplicateCandidates(input,total,snapshot,operationId){
+  const incomingStore=normalizedStore(input.store);
+  const headers=new Map((snapshot.purchases||[]).filter(p=>!p.voided).map(p=>[p.id,{id:p.id,date:p.date,store:p.store||'',total:p.total,concept:p.concept||'Ticket de compra',productCount:p.lineIds?.length||0}]));
+  const knownHeaders=new Set((snapshot.purchases||[]).map(p=>p.id)),legacy=new Map();
+  for(const line of snapshot.movements||[]){
+   const id=line.ticketGroupId||line.purchaseId;if(!id||knownHeaders.has(id)||line.voided||line.type!=='compra')continue;
+   if(!legacy.has(id))legacy.set(id,{id,date:line.date,store:line.store||'',total:0,concept:line.ticketConcept||'Ticket de compra',productCount:0});
+   const group=legacy.get(id);group.total+=C.cents(line.total);group.productCount++;
+  }
+  for(const [id,g]of legacy)headers.set(id,{...g,total:g.total/100});
+  return [...headers.values()].filter(p=>{
+   if(p.id===operationId||p.date!==input.date||C.cents(p.total)!==C.cents(total))return false;
+   const existingStore=normalizedStore(p.store);return !incomingStore||!existingStore||incomingStore===existingStore;
+  }).sort((a,b)=>a.id.localeCompare(b.id));
+ }
+ function duplicateToken(input,matches){
+  return JSON.stringify({date:input.date,store:normalizedStore(input.store),lines:input.lines.map(l=>({itemId:l.itemId||null,name:String(l.itemName||'').trim().toLowerCase(),qty:l.qty,pack:l.unitsPerPack||1,total:C.cents(l.total)})),matches:matches.map(p=>p.id)});
+ }
  async function create(input,meta){
   C.date(input.date);const allocation=plan(input);
-  return store.atomic(meta,async t=>{
+  let matches=[],transactionMeta=meta;
+  if(meta.kind==='purchase-ticket'){
+   const snapshot=await store.ticketCandidates(input.date,meta.opId);
+   if(snapshot.operation)return snapshot.operation.result;
+   matches=duplicateCandidates(input,allocation.total,snapshot,meta.opId);
+   if(matches.length&&!(input.allowDuplicate===true&&input.duplicateToken===duplicateToken(input,matches))){
+    const error=Error('Posible ticket duplicado. Confirma expresamente si quieres registrarlo otra vez.');error.code='DUPLICATE_TICKET';error.matches=matches;error.duplicateToken=duplicateToken(input,matches);throw error;
+   }
+   transactionMeta={...meta,expectedRevision:snapshot.revision};
+  }
+  return store.atomic(transactionMeta,async t=>{
    const lines=[];
    for(let i=0;i<input.lines.length;i++){
     const l=input.lines[i];C.number(l.qty,'Cantidad',true);const unitsPerPack=l.unitsPerPack??1;if(!Number.isSafeInteger(unitsPerPack)||unitsPerPack<1||unitsPerPack>100000)throw Error('Unidades por paquete debe ser un entero entre 1 y 100000');if(unitsPerPack!==1&&!l.itemId)throw Error('Vincula el producto al inventario para convertir paquetes');const stockQty=C.number(l.qty*unitsPerPack,'Unidades de inventario',true);let item=null;
@@ -71,7 +100,7 @@
     const itemName=item?item.name:l.itemName;if(!itemName)throw Error('Completa el nombre del producto');
     lines.push({...(allocation.lineShares[i]?{participantIds:allocation.lineShares[i].map(p=>p.memberId),beneficiaryShares:allocation.lineShares[i]}:{}),id:t.id+'-'+i,itemId:l.itemId||null,itemName,category:item?item.category:l.category,unit:item?.unit||'',inventoryTracked:!!item&&item.trackingMode!=='simple',qty:stockQty,purchasedQty:l.qty,unitsPerPack,total:l.total,type:'compra',store:input.store||'',note:input.note||'',date:input.date});
    }
-   const header={id:t.id,date:input.date,store:input.store||'',concept:input.concept||'Compra',kind:input.kind||'despensa',mode:input.mode||'normal',participantIds:allocation.shares.map(p=>p.memberId),payers:allocation.payers,beneficiaryShares:allocation.shares,total:allocation.total};
+   const header={id:t.id,date:input.date,store:input.store||'',concept:input.concept||'Compra',kind:input.kind||'despensa',mode:input.mode||'normal',participantIds:allocation.shares.map(p=>p.memberId),payers:allocation.payers,beneficiaryShares:allocation.shares,total:allocation.total,...(matches.length?{duplicateOf:matches.map(p=>p.id),duplicateConfirmed:true}:{})};
    await write(t,header,lines);return t.id;
   });
  }

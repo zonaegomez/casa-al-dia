@@ -1,8 +1,10 @@
 const clone=v=>v==null?v:structuredClone(v);
 function fakeDB(seed={}){
  const docs=new Map(Object.entries(seed).map(([k,v])=>[k,{value:clone(v),version:1}]));let failures=0;
- const doc=path=>({path});
- return {doc,collection:name=>({doc:id=>doc(name+'/'+id)}),failNext(){failures++;},snapshot:()=>Object.fromEntries([...docs].map(([path,entry])=>[path,clone(entry.value)])),read:path=>clone(docs.get(path)?.value),
+ const snapshot=path=>{const entry=docs.get(path);return {id:path.split('/').at(-1),exists:!!entry,data:()=>clone(entry?.value)};};
+ const doc=path=>({path,async get(){return snapshot(path);}});
+ const query=(name,filters=[])=>({doc:id=>doc(name+'/'+id),where(field,op,value){if(op!=='==')throw Error('Unsupported test query');return query(name,[...filters,{field,value}]);},async get(){return {docs:[...docs].filter(([path,entry])=>path.startsWith(name+'/')&&filters.every(f=>entry.value[f.field]===f.value)).map(([path])=>snapshot(path))};}});
+ return {doc,collection:name=>query(name),failNext(){failures++;},snapshot:()=>Object.fromEntries([...docs].map(([path,entry])=>[path,clone(entry.value)])),read:path=>clone(docs.get(path)?.value),
   async runTransaction(fn){
    for(let attempt=0;attempt<20;attempt++){
     const reads=new Map(),writes=[];let wrote=false;
