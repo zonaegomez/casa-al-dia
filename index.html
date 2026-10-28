@@ -316,34 +316,17 @@
   .room-card:hover{transform:translateY(-2px); box-shadow:var(--shadow-md);}
   .floor-label{margin:18px 0 8px; font-weight:700; text-transform:uppercase; font-size:12px; letter-spacing:.04em; color:var(--ink-faint);}
 
-  /* ---------- dashboard: hero + wallet + quick actions ---------- */
-  .hero-row{display:grid; grid-template-columns:1.4fr 1fr; gap:14px; margin-bottom:16px;}
-  .hero-card{
-    background:var(--accent-soft); border-radius:24px; padding:28px; position:relative; overflow:hidden;
-    display:flex; flex-direction:column; justify-content:center; min-height:168px;
-    animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both;
-  }
-  .hero-card:after{
-    content:'⌂'; position:absolute; right:-14px; bottom:-38px; font-size:155px; line-height:1;
-    color:var(--accent); opacity:.1; transform:rotate(-8deg);
-  }
-  .hero-card h1{position:relative; z-index:1; font-size:26px; margin:0 0 7px; max-width:80%;}
-  .hero-card p{position:relative; z-index:1; max-width:75%; margin:0 0 16px;}
-  .hero-card .btn-primary{position:relative; z-index:1; align-self:flex-start;}
-  .wallet-card{
-    /* Fondo oscuro fijo (no usa --ink, que cambia de claro a oscuro según el
-       tema) para que el texto blanco siempre tenga buen contraste, sea cual
-       sea el modo elegido. */
-    background:linear-gradient(155deg, #201C33 0%, color-mix(in srgb, #201C33 70%, var(--accent)) 100%);
-    color:#fff; border-radius:24px; padding:26px; display:flex; flex-direction:column; justify-content:space-between;
-    animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both; animation-delay:.05s; min-height:168px;
-  }
-  .wallet-card .eyebrow{color:#ffffffa8;}
-  .wallet-card .amount{font-family:'IBM Plex Mono',monospace; font-size:32px; font-weight:600; margin:10px 0 3px; letter-spacing:-.01em;}
-  .wallet-card p{color:#ffffffb0; font-size:12px; margin:0;}
-  .wallet-foot{display:flex; align-items:center; justify-content:space-between; margin-top:14px;}
-  .wallet-foot .btn{background:#ffffff1c; border-color:#ffffff2a; color:#fff;}
-  .wallet-foot .btn:hover{background:#ffffff2c;}
+  /* ---------- dashboard: minimal hero + quick actions ---------- */
+  .hero-minimal{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(240px,1fr);gap:40px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px 36px;margin-bottom:20px;}
+  .hero-minimal-kicker{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--ink-soft);margin-bottom:12px;}
+  .hero-minimal-amount{font-family:'Manrope',sans-serif;font-size:clamp(36px,4.5vw,60px);font-weight:800;letter-spacing:-.045em;line-height:1.1;color:var(--ink);overflow-wrap:anywhere;}
+  .hero-minimal-caption{font-size:14px;color:var(--ink-soft);margin:10px 0 22px;}
+  .hero-minimal-side{border-left:1px solid var(--border);padding-left:32px;}
+  .hero-minimal-side p{margin:8px 0 0;font-size:14px;line-height:1.6;}
+  .hero-minimal-side small{display:block;margin-top:4px;color:var(--ink-soft);font-size:12px;}
+  .hero-minimal-next{margin-top:24px;}
+  .hero-minimal-status{display:flex;align-items:center;gap:8px;font-weight:600;}
+  @media(max-width:700px){.hero-minimal{grid-template-columns:1fr;padding:24px;gap:24px;}.hero-minimal-side{border-left:0;border-top:1px solid var(--border);padding:20px 0 0;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;}.hero-minimal-next{margin:0;}.hero-minimal-main>.btn{width:100%;}}
 
   .quick-actions{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px;}
   .quick-action{
@@ -366,7 +349,6 @@
   .theme-preview{border:1px solid var(--border); border-radius:16px; padding:18px; margin-top:16px; background:var(--bg);}
 
   @media (max-width: 980px){
-    .hero-row{grid-template-columns:1fr;}
     .quick-actions{grid-template-columns:repeat(2,1fr);}
   }
   @media (max-width: 760px){
@@ -1007,23 +989,18 @@ function pageDashboard(){
       </div>
     </div>
 
-    <div class="hero-row">
-      <section class="hero-card">
-        <div class="page-eyebrow" style="margin-bottom:8px;">LA CASA AL DÍA</div>
-        <h1>${low.length ? `Hay ${low.length} artículo(s) por reponer.` : 'Todo abastecido en casa.'}</h1>
-        <p>${nextBill ? `Próximo pago: ${esc(nextBill.name)} · ${fmtDate(nextBill.nextDueDate)}.` : 'Sin pagos pendientes por ahora.'}</p>
-        <button class="btn btn-primary" onclick="App.openMovement('compra')">${icon('plus')} Registrar compra</button>
-      </section>
-      <section class="wallet-card">
-        <div class="page-eyebrow">${bal ? 'TU SALDO COMPARTIDO' : 'GASTO DEL CICLO'}</div>
-        <div class="amount">${bal ? (me?fmtMoney(Math.abs(myBalance)):'—') : fmtMoney(stats.total)}</div>
-        <p>${bal ? (!me?'Vinculación pendiente':myBalance<0?'Te toca aportar':myBalance>0?'Tienes por recibir':'Estás al parejo') : 'Agrega miembros para calcular el reparto'}</p>
-        <div class="wallet-foot">
-          <span class="small" style="color:#ffffffa0;">${cap(cycleLabel(cycle))}</span>
-          <button class="btn btn-sm" onclick="App.go('cuentas')">Ver cuentas ${icon('chevRight')}</button>
-        </div>
-      </section>
-    </div>
+    <section class="hero-minimal" aria-label="Resumen principal">
+      <div class="hero-minimal-main">
+        <div class="hero-minimal-kicker">${bal?'Saldo compartido acumulado':'Gasto del ciclo'}</div>
+        <div class="hero-minimal-amount">${bal?(me?fmtMoney(Math.abs(myBalance)):'—'):fmtMoney(stats.total)}</div>
+        <p class="hero-minimal-caption">${bal?(!me?'Vinculación pendiente':myBalance<0?'Te toca aportar':myBalance>0?'Tienes por recibir':'Estás al parejo'):'Agrega miembros para calcular el reparto'}</p>
+        <button class="btn btn-primary" onclick="App.go('cuentas')">Ver cuentas ${icon('chevRight')}</button>
+      </div>
+      <div class="hero-minimal-side">
+        <div><div class="hero-minimal-kicker">En casa</div><p class="hero-minimal-status"><span class="dot ${low.length?'dot-warn':'dot-good'}"></span>${low.length?`${low.length} artículo(s) por reponer`:'Todo abastecido'}</p></div>
+        <div class="hero-minimal-next"><div class="hero-minimal-kicker">Próximo pago</div><p>${nextBill?esc(nextBill.name):'Sin pagos pendientes'}</p>${nextBill?`<small>${fmtDate(nextBill.nextDueDate)}</small>`:''}</div>
+      </div>
+    </section>
 
     <div class="quick-actions">
       <button class="quick-action" onclick="App.openMovement('compra')"><span class="qicon">${icon('plus')}</span><div><b>Registrar compra</b><small>Lo que llega a casa</small></div></button>
