@@ -102,6 +102,7 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   await page.evaluate(()=>{const q=window.__qa;App.closeModal();q.state.settings={...q.state.settings,financePlan:CasaFinance.create({creditorId:'c',startDate:'2026-10-15',equipmentTotal:600.01,equipmentMonthly:33.33,firstPaid:true,rows:[{memberId:'a',entryTotal:1000,rent:300},{memberId:'b',entryTotal:1100,rent:350},{memberId:'c',entryTotal:1200,rent:400}]},q.state.members)};App.setFinanceMonth('2026-10');});
   assert.ok((await page.locator('#main').innerText()).includes('Mi plan de pagos · Persona A'));
   assert.ok((await page.locator('#main').innerText()).includes('$833.33'));
+  assert.equal(await page.locator('.finance-progress-cards [role=progressbar]').count(),4);assert.equal(await page.getByRole('progressbar',{name:'Este mes',exact:true}).first().getAttribute('aria-valuenow'),'100');assert.equal(await page.getByRole('progressbar',{name:'Total del plan',exact:true}).first().getAttribute('aria-valuenow'),'16.67');
   await page.evaluate(()=>{window.__qa.financeIdentity('c','member');window.__qa.render();});
   assert.ok((await page.locator('#main').innerText()).includes('Por recuperar'));
   assert.ok((await page.locator('#main').innerText()).includes('Saldo al proveedor: $600.01'));

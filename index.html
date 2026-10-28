@@ -1773,6 +1773,12 @@ function pageCuentas(){
 }
 
 /* Household plans are shared records. Each account sees its own summary. */
+function financeProgressBar(label,covered,total){
+ const goal=CasaCore.cents(total),done=Math.min(goal,Math.max(0,CasaCore.cents(covered)));
+ if(!goal)return '<p class="page-sub">'+esc(label)+': sin cuota por cubrir.</p>';
+ const percent=Math.round(done/goal*10000)/100,text=new Intl.NumberFormat('es-MX',{maximumFractionDigits:2}).format(percent)+'%';
+ return `<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:6px"><span>${esc(label)}</span><strong>${text}</strong></div><div role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-valuetext="${text} cubierto" style="height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden"><div style="height:100%;width:${percent}%;background:${done===goal?'var(--good)':'var(--accent, #6258e8)'};border-radius:999px"></div></div><small style="display:block;margin-top:6px;color:var(--ink-soft)">${fmtMoney(done/100)} de ${fmtMoney(goal/100)}</small></div>`;
+}
 function financePlansBody(){
  const p=state.settings.financePlan,name=id=>state.members.find(m=>m.id===id)?.name||'Integrante';
  if(!p)return `<div class="card" style="padding:20px"><h2>Mi plan de pagos</h2><p>Organiza lo que cada persona debe devolver por un adelanto o aportar para una compra a plazos.</p><p>Por ejemplo: alguien pagó una mudanza por todos, o compraron un refrigerador con crédito. Elige participantes, conceptos y número de cuotas.</p><p>Los abonos no generan otro gasto. Este plan es compartido; los préstamos privados tienen su propia sección.</p>${accountRole==='admin'?'<button class="btn btn-primary" onclick="App.openFinanceSetup()">Crear plan de pagos</button>':'<p>El administrador puede crear el plan de pagos de la casa.</p>'}</div>`;
@@ -1791,6 +1797,9 @@ function financePlansBody(){
  <p>${p.dates.length} cuota(s) mensuales, del ${fmtDate(p.dates[0])} al ${fmtDate(last)}. Responsable del adelanto: ${esc(name(p.creditorId))}.</p>
  ${row.rent?`<p>Gasto fijo mensual de referencia: <strong>${fmtMoney(row.rent)}</strong>. Sus recibos y pagos se registran en Servicios; no se marcan pagados desde este plan.</p>`:''}
  ${index>=0?`<p>Aportación prevista: <strong>${fmtMoney(row.rent+own('entry')+own('equipment'))}</strong>${row.rent?' (incluye la referencia mensual)':''}. Otros gastos de la casa se suman aparte.</p>`:period>last.slice(0,7)?'<p>El calendario terminó. Cualquier saldo sin pagar sigue pendiente.</p>':'<p>El plan todavía no comienza en el mes seleccionado.</p>'}
+ <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:20px 0" class="finance-progress-cards">
+ ${kinds.map(k=>{const total=row[k].reduce((s,n)=>s+CasaCore.cents(n),0)/100,covered=Math.max(0,total-CasaFinance.remaining(p,row,k));return `<section style="padding:16px;border:1px solid var(--border);border-radius:14px" aria-label="Avance de ${esc(labels[k])}"><strong>${esc(labels[k])}</strong>${index>=0?financeProgressBar('Este mes',paid(k),own(k)):'<p class="page-sub">Sin cuota en el mes seleccionado.</p>'}${total?financeProgressBar('Total del plan',covered,total):'<p class="page-sub">Sin deuda propia en este concepto.</p>'}</section>`;}).join('')}
+ </div>
  <div style="overflow-x:auto"><table><thead><tr><th>Concepto</th><th>Cuota del mes</th><th>Abonado del mes</th><th>Falta del mes</th><th>Saldo total pendiente</th></tr></thead><tbody>
  ${kinds.map(k=>`<tr><td>${esc(labels[k])}</td><td>${fmtMoney(own(k))}</td><td>${fmtMoney(paid(k))}</td><td>${fmtMoney(Math.max(0,own(k)-paid(k)))}</td><td>${fmtMoney(CasaFinance.remaining(p,row,k))}</td></tr>`).join('')}
  </tbody></table></div><p>Los abonos de este plan reducen sus saldos pendientes y no vuelven a sumar en los gastos de la casa.</p>
