@@ -15,9 +15,17 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
    context.putImageData(image,0,0);
    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',1));
    const file=new File([blob],'ticket.jpg',{type:'image/jpeg'}),result=await App.prepareTicketPhoto(file);
-   return {before:file.size,after:result.blob.size,type:result.mediaType,compressed:result.compressed};
+   window.__photoQA=file;return {before:file.size,after:result.blob.size,type:result.mediaType,compressed:result.compressed};
   });
   assert.ok(photoResult.before>1800000);assert.ok(photoResult.after<=1800000);assert.equal(photoResult.type,'image/jpeg');assert.equal(photoResult.compressed,true);
+  const uploaded=await page.evaluate(async()=>{
+   const originalFetch=window.fetch;let bytes=0;
+   window.__qa.passwordUser({uid:'qa-a',getIdToken:async()=>'qa-token'});
+   window.fetch=async(url,options)=>{bytes=JSON.parse(options.body).imageBase64.length;return {ok:true,json:async()=>({lines:[]})};};
+   try{await App.scanTicketPhoto(window.__photoQA);return bytes;}finally{window.fetch=originalFetch;delete window.__photoQA;}
+  });
+  assert.ok(uploaded>0);assert.ok(uploaded<=2800000);
+
   await page.evaluate(()=>{const q=window.__qa;q.activate();Object.assign(q.state,{members:[{id:'a',name:'Persona A',color:'#6258E8'},{id:'b',name:'Persona B',color:'#3E6DF6'}],memberId:'a',items:[{id:'rice',name:'Arroz',category:'despensa',unit:'kg',currentQty:2,minQty:1},{id:'coffee',name:'Café',category:'despensa',unit:'paquete',currentQty:0,minQty:0,trackingMode:'simple',stockStatus:'hay'}],movements:[{id:'m',type:'compra',qty:2,total:100,date:'2026-10-19',memberId:'a',memberName:'Persona A',participantIds:['a','b'],category:'despensa',itemName:'Arroz'}],dbMode:'live'});q.render();});
   for(const surface of ['dashboard','ubicaciones','super','inventario','servicios','cuentas','recordatorios','ciclos','config']){
    await page.evaluate(surface=>App.go(surface),surface);assert.ok((await page.locator('#main').innerText()).trim(),surface);
