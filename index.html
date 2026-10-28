@@ -1926,6 +1926,7 @@ function pageCiclos(){
             const cycleBudget=closed?(s.budget??0):budget;
             const overBudget=cycleBudget>0&&s.total>cycleBudget;
             const isCurrent = k === cycleKeyFor(todayISO());
+            const isFuture = k > cycleKeyFor(todayISO());
             return `<tr>
               <td class="row-title">${cap(cycleLabel(k))}</td>
               ${catCellHtml(s.byCat.despensa, 'despensa',closed?(s.budgetByCategory||{}):undefined)}
@@ -1936,7 +1937,7 @@ function pageCiclos(){
               <td class="num">${s.byCat.otro?fmtMoney(s.byCat.otro):'—'}</td>
               <td class="num" style="font-weight:700">${fmtMoney(s.total)}</td>
               <td>${cycleBudget>0?`<span class="badge ${overBudget?'badge-bad':'badge-good'}"><span class="dot ${overBudget?'dot-bad':'dot-good'}"></span>${overBudget?'Excedido':'Dentro'}</span>`:'—'}</td>
-              <td>${closed?`<span class="badge badge-good"><span class="dot dot-good"></span>Cerrado</span>`:isCurrent?`<span class="badge">En curso</span>`:`<button class="btn btn-sm btn-ghost" onclick="App.confirmCloseCycle('${k}')">Cerrar</button>`}</td>
+              <td>${closed?`<span class="badge badge-good"><span class="dot dot-good"></span>Cerrado</span>`:isCurrent?`<span class="badge">En curso</span>`:isFuture?`<span class="badge">Futuro</span>`:`<button class="btn btn-sm btn-ghost" onclick="App.confirmCloseCycle('${k}')">Cerrar</button>`}</td>
             </tr>`;
           }).join('')}
           </tbody>
@@ -3194,6 +3195,7 @@ Object.assign(App,{
  },
  async confirmUndoSettlement(id){if(confirm('¿Anular esta transferencia?')){await Data.atomic({kind:'void-settlement'},async t=>{await t.put('settlements',id,{voided:true});});toast('Transferencia anulada');}},
  async confirmCloseCycle(cycleKey){
+  if(cycleKey>=cycleKeyFor(todayISO())){toast('Solo se pueden cerrar ciclos que ya terminaron');return;}
   if(!confirm('¿Cerrar '+cycleLabel(cycleKey)+'? El servidor conciliará el periodo y bloqueará cambios.'))return;
   const res=await fetch('/api/close-cycle',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+await signedInUser.getIdToken()},body:JSON.stringify({cycleKey})});
   const data=await res.json();if(!res.ok)throw Error(data.error||'No se pudo cerrar');toast('Ciclo conciliado y cerrado');

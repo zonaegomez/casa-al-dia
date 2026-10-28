@@ -30,6 +30,15 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   for(const surface of ['dashboard','ubicaciones','super','inventario','servicios','cuentas','recordatorios','ciclos','config']){
    await page.evaluate(surface=>App.go(surface),surface);assert.ok((await page.locator('#main').innerText()).trim(),surface);
   }
+  await page.evaluate(()=>{
+   window.__cycleRowsQA=window.__qa.state.movements;
+   const row=date=>({id:'qa-'+date,type:'compra',qty:1,total:1,date,memberId:'a',memberName:'Persona A',participantIds:['a','b'],category:'despensa',itemName:'Ciclo QA'});
+   window.__qa.state.movements=[...window.__cycleRowsQA,row('2999-01-01'),row('2000-01-01'),row(CasaCore.today())];App.go('ciclos');
+  });
+  const futureRow=page.locator('tr').filter({hasText:'2999'});assert.equal(await futureRow.getByRole('button',{name:'Cerrar',exact:true}).count(),0);assert.ok((await futureRow.innerText()).includes('Futuro'));
+  const pastRow=page.locator('tr').filter({hasText:'2000'});assert.equal(await pastRow.getByRole('button',{name:'Cerrar',exact:true}).count(),1);
+  const currentRow=page.locator('tr').filter({hasText:'En curso'});assert.equal(await currentRow.getByRole('button',{name:'Cerrar',exact:true}).count(),0);
+  await page.evaluate(()=>{window.__qa.state.movements=window.__cycleRowsQA;delete window.__cycleRowsQA;});
   await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});await page.getByText('Saldo acumulado de toda la casa.',{exact:false}).waitFor();
   await page.setViewportSize({width:390,height:844});
   for(const surface of ['dashboard','inventario','cuentas','config']){await page.evaluate(p=>App.go(p),surface);assert.ok(await page.locator('#main').isVisible());}
