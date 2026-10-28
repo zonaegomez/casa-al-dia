@@ -3346,10 +3346,16 @@ Object.assign(App,{
   await Data.atomic({kind:'correct-debt-payment'},async t=>{const d=await t.get('debts',id);const payments=[...(d.payments||[])];if(JSON.stringify(payments[idx])!==JSON.stringify(before))throw Error('Los abonos cambiaron. Abre de nuevo el historial.');payments.splice(idx,1);await t.put('debts',id,{payments});});closeModal();toast('Abono eliminado');
  },
  async markTransferPaid(periodKey,granularity,fromId,fromName,toId,toName,amount){
-  if(!confirm(`¿Confirmas la transferencia de ${fmtMoney(amount)} de ${fromName} a ${toName}?`))return;
-  const expectedRevision=Number(state.settings.revision||0),operationId='settlement-'+expectedRevision+'-'+fromId+'-'+toId;
-  const res=await fetch('/api/settle',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+await signedInUser.getIdToken()},body:JSON.stringify({fromId,toId,amount,expectedRevision,operationId})});
-  const data=await res.json();if(!res.ok)throw Error(data.error||'No se pudo registrar la transferencia');toast('Transferencia registrada');
+  state.pendingTransfer={fromId,toId,amount,expectedRevision:Number(state.settings.revision||0),operationId:'settlement-'+uid()};
+  openModal(`<div class="modal-header"><h3>Registrar transferencia realizada</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()" aria-label="Cerrar">${icon('x')}</button></div><div class="modal-body"><p>${esc(fromName)} → ${esc(toName)}</p><p>Pendiente actual: <strong>${fmtMoney(amount)}</strong></p><p class="page-sub">Captura lo que realmente transferiste. Si fue menos, la diferencia seguirá pendiente. Este registro no envía dinero.</p><div class="field"><label for="transferAmount">Importe transferido (MXN)</label><input id="transferAmount" type="number" min="0.01" max="${amount}" step="0.01" value="${amount.toFixed(2)}"></div><div class="field"><label for="transferDate">Fecha real de la transferencia</label><input id="transferDate" type="date" max="${todayISO()}" value="${todayISO()}"></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="App.confirmTransferPayment()">Guardar transferencia</button></div>`);
+ },
+ async confirmTransferPayment(){
+  const pending=state.pendingTransfer;if(!pending)throw Error('Abre nuevamente el registro de transferencia');
+  const amount=CasaCore.money(document.getElementById('transferAmount').value),date=CasaCore.date(document.getElementById('transferDate').value);
+  if(amount<=0||CasaCore.cents(amount)>CasaCore.cents(pending.amount))throw Error('El importe debe ser mayor a cero y no exceder el pendiente');
+  if(date>todayISO())throw Error('La transferencia no puede tener fecha futura');
+  const res=await fetch('/api/settle',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+await signedInUser.getIdToken()},body:JSON.stringify({...pending,amount,date})});
+  const data=await res.json();if(!res.ok)throw Error(data.error||'No se pudo registrar la transferencia');state.pendingTransfer=null;closeModal();toast('Transferencia registrada');
  },
  async confirmUndoSettlement(id){if(confirm('¿Anular esta transferencia?')){await Data.atomic({kind:'void-settlement'},async t=>{await t.put('settlements',id,{voided:true});});toast('Transferencia anulada');}},
  async confirmCloseCycle(cycleKey){
