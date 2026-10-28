@@ -8,6 +8,16 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
  await page.route('https://**/*',r=>r.abort());
  try{
   await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#loginEmail').waitFor();
+  const photoResult=await page.evaluate(async()=>{
+   const canvas=document.createElement('canvas');canvas.width=2400;canvas.height=2400;
+   const context=canvas.getContext('2d'),image=context.createImageData(canvas.width,canvas.height);let seed=123456789;
+   for(let i=0;i<image.data.length;i+=4){seed=(seed*1664525+1013904223)>>>0;image.data[i]=seed&255;image.data[i+1]=(seed>>>8)&255;image.data[i+2]=(seed>>>16)&255;image.data[i+3]=255;}
+   context.putImageData(image,0,0);
+   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',1));
+   const file=new File([blob],'ticket.jpg',{type:'image/jpeg'}),result=await App.prepareTicketPhoto(file);
+   return {before:file.size,after:result.blob.size,type:result.mediaType,compressed:result.compressed};
+  });
+  assert.ok(photoResult.before>1800000);assert.ok(photoResult.after<=1800000);assert.equal(photoResult.type,'image/jpeg');assert.equal(photoResult.compressed,true);
   await page.evaluate(()=>{const q=window.__qa;q.activate();Object.assign(q.state,{members:[{id:'a',name:'Persona A',color:'#6258E8'},{id:'b',name:'Persona B',color:'#3E6DF6'}],memberId:'a',items:[{id:'rice',name:'Arroz',category:'despensa',unit:'kg',currentQty:2,minQty:1},{id:'coffee',name:'Café',category:'despensa',unit:'paquete',currentQty:0,minQty:0,trackingMode:'simple',stockStatus:'hay'}],movements:[{id:'m',type:'compra',qty:2,total:100,date:'2026-10-19',memberId:'a',memberName:'Persona A',participantIds:['a','b'],category:'despensa',itemName:'Arroz'}],dbMode:'live'});q.render();});
   for(const surface of ['dashboard','ubicaciones','super','inventario','servicios','cuentas','recordatorios','ciclos','config']){
    await page.evaluate(surface=>App.go(surface),surface);assert.ok((await page.locator('#main').innerText()).trim(),surface);

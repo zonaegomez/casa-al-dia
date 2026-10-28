@@ -2620,52 +2620,62 @@ window.App = {
     if(!file) return;
     App.scanTicketPhoto(file);
   },
+  async prepareTicketPhoto(file){
+    const maxBytes=1800000,accepted=['image/jpeg','image/png','image/webp'];
+    if(file.size<=maxBytes&&accepted.includes(file.type))return {blob:file,mediaType:file.type,compressed:false};
+    let image,width,height,bitmap=null,objectUrl=null;
+    try{
+      if(typeof createImageBitmap==='function'){
+        bitmap=await createImageBitmap(file);image=bitmap;width=bitmap.width;height=bitmap.height;
+      }else{
+        image=new Image();objectUrl=URL.createObjectURL(file);
+        await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('No se pudo abrir la imagen'));image.src=objectUrl;});
+        width=image.naturalWidth;height=image.naturalHeight;
+      }
+      if(!width||!height)throw Error('La imagen no tiene dimensiones válidas');
+      const canvas=document.createElement('canvas'),context=canvas.getContext('2d');
+      if(!context)throw Error('Este navegador no puede comprimir la foto');
+      let scale=Math.min(1,2200/Math.max(width,height)),quality=.84;
+      for(let attempt=0;attempt<9;attempt++){
+        canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
+        context.drawImage(image,0,0,canvas.width,canvas.height);
+        const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));
+        if(blob&&blob.size<=maxBytes)return {blob,mediaType:'image/jpeg',compressed:true};
+        if(quality>.55)quality-=.1;else scale*=.82;
+      }
+      throw Error('No se pudo reducir la foto a menos de 2 MB. Intenta recortarla.');
+    }finally{if(bitmap)bitmap.close();if(objectUrl)URL.revokeObjectURL(objectUrl);}
+  },
   async scanTicketPhoto(file){
-    if(file.size > 2*1024*1024){ toast('La foto es muy pesada (máx. 2MB)'); return; }
     openModal(`
-      <div class="modal-header"><h3>Leyendo el ticket…</h3></div>
+      <div class="modal-header"><h3>Preparando el ticket…</h3></div>
       <div class="modal-body" style="text-align:center; padding:34px 0;">
-        <div class="page-sub">Un momento, estamos leyendo los conceptos y precios de la foto…</div>
+        <div class="page-sub">Optimizamos la foto y después leemos los productos…</div>
       </div>
     `);
     try{
-      const dataUrl = await new Promise((resolve,reject)=>{
-        const reader = new FileReader();
-        reader.onload = ()=>resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+      const prepared=await App.prepareTicketPhoto(file);
+      const dataUrl=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(prepared.blob);
       });
-      const base64 = String(dataUrl).split(',')[1] || '';
-      const mediaType = file.type || 'image/jpeg';
-      const res = await fetch('/api/parse-ticket', {
+      const base64=String(dataUrl).split(',')[1]||'';
+      const res=await fetch('/api/parse-ticket',{
         method:'POST',
         headers:{'content-type':'application/json',authorization:'Bearer '+await signedInUser.getIdToken()},
-        body: JSON.stringify({imageBase64: base64, mediaType})
+        body:JSON.stringify({imageBase64:base64,mediaType:prepared.mediaType})
       });
-      let payload = {};
-      try{ payload = await res.json(); }catch(e){}
-      if(!res.ok){
-        closeModal();
-        toast(payload && payload.error ? payload.error : 'No se pudo leer el ticket (¿ya configuraste el backend?)');
-        return;
-      }
-      const lines = Array.isArray(payload.lines) ? payload.lines : [];
+      let payload={};try{payload=await res.json();}catch(e){}
+      if(!res.ok){closeModal();toast(payload&&payload.error?payload.error:'No se pudo leer el ticket (¿ya configuraste el backend?)');return;}
+      const lines=Array.isArray(payload.lines)?payload.lines:[];
       closeModal();
-      if(!lines.length){
-        toast('No se detectó ningún producto en la foto. Intenta con más luz o de más cerca.');
-        return;
-      }
-      const items = state.items.slice();
-      const scannedLines = lines.map(l=>{
-        const match = findBestItemMatch(l.name, items);
-        return { itemId: match?match.id:null, name: l.name, price: Number(l.price)||0 };
-      });
+      if(!lines.length){toast('No se detectó ningún producto en la foto. Intenta con más luz o de más cerca.');return;}
+      const items=state.items.slice();
+      const scannedLines=lines.map(l=>{const match=findBestItemMatch(l.name,items);return {itemId:match?match.id:null,name:l.name,price:Number(l.price)||0};});
       modalTicket(null,scannedLines,{date:payload.date,store:payload.store,warnings:payload.warnings,discountsApplied:payload.discountsApplied});
       document.getElementById('tkExpectedTotal').value=CasaCore.money(payload.total);App.updateTicketTotal();
-      toast(scannedLines.length+' producto(s) detectados — revísalos antes de guardar');
+      toast((prepared.compressed?'Foto optimizada · ':'')+scannedLines.length+' producto(s) detectados — revísalos antes de guardar');
     }catch(e){
-      closeModal();
-      toast('No se pudo leer la foto del ticket');
+      closeModal();toast(e.message||'No se pudo leer la foto del ticket');
     }
   },
 
