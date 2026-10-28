@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 62464)
-Total output lines: 3317
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1783,7 +1780,101 @@ function financePlansBody(){
  const creditor=p.creditorId===accountMemberId;
  const before=period<p.dates[0].slice(0,7),after=period>p.dates[5].slice(0,7);
  return '<div class="card" style="padding:20px"><h2>Mi plan de pagos · '+esc(name(accountMemberId))+'</h2><label>Mes <input type="month" value="'+esc(period)+'" onchange="App.setFinanceMonth(this.value)"></label><p>Plan de '+fmtDate(p.dates[0])+' a '+fmtDate(p.dates[5])+'. Renta corriente de referencia: <strong>'+fmtMoney(row.rent)+'</strong>. Sus recibos y pagos se consultan en Servicios.</p>'+(index>=0?'<p>Aportación prevista: <strong>'+fmtMoney(row.rent+own('entry')+own('equipment'))+'</strong> más servicios y compras.</p>':after?'<p>El calendario de seis cuotas terminó. Cualquier saldo sin pagar sigue pendiente.</p>':before?'<p>El plan todavía no comienza en el mes seleccionado.</p>':'')+
- '<div style="overflow-x:auto"><table><thead><tr><th>Obligación</th><th>Cuota del mes</th><th>Abonado del mes</th><th>Falta del mes</th><th>Saldo total pendiente</th></tr></thead><tbody>'+['entry','equipment'].map(k=>'<tr><td>'+(k==='entry'?'Adelanto de entrada':'Lavadora y secad…2464 tokens truncated…length? `<div class="panel" style="margin-bottom:12px;">
+ '<div style="overflow-x:auto"><table><thead><tr><th>Obligación</th><th>Cuota del mes</th><th>Abonado del mes</th><th>Falta del mes</th><th>Saldo total pendiente</th></tr></thead><tbody>'+['entry','equipment'].map(k=>'<tr><td>'+(k==='entry'?'Adelanto de entrada':'Lavadora y secadora')+'</td><td>'+fmtMoney(own(k))+'</td><td>'+fmtMoney(paid(k))+'</td><td>'+fmtMoney(Math.max(0,own(k)-paid(k)))+'</td><td>'+fmtMoney(CasaFinance.remaining(p,row,k))+'</td></tr>').join('')+'</tbody></table></div><p>Estos abonos no están incluidos en el saldo de compras y servicios. Aquí solo se controlan los planes iniciales.</p>'+
+ (creditor?'<h3>Por recuperar</h3>'+p.rows.filter(r=>r.memberId!==p.creditorId).map(r=>'<p>'+esc(name(r.memberId))+': adelanto '+fmtMoney(CasaFinance.remaining(p,r,'entry'))+' · equipo '+fmtMoney(CasaFinance.remaining(p,r,'equipment'))+'</p>').join('')+'<h3>Crédito del equipo</h3><p>Entregar dinero a quien administra el crédito no lo marca como pagado al proveedor.</p><p>Saldo al proveedor: '+fmtMoney(p.equipmentTotal-p.providerPayments.filter(x=>!x.voided).reduce((s,x)=>s+x.amount,0))+'</p>':'')+
+ '<details><summary>Calendario y abonos registrados</summary>'+p.dates.map((d,i)=>'<p>'+fmtDate(d)+' · entrada '+fmtMoney(row.entry[i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,'entry',i))+' · equipo '+fmtMoney(row.equipment[i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,'equipment',i))+'</p>').join('')+'<p>Los abonos de apertura confirman aportaciones entre integrantes; no confirman el pago al crédito.</p></details>'+
+ (accountRole==='admin'?'<details><summary>Administrar cuotas de la casa</summary><p>Registra únicamente pagos efectivamente realizados. Las cuotas iniciales confirmadas se conservarán en el historial.</p>'+p.rows.map(r=>'<details><summary>'+esc(name(r.memberId))+'</summary>'+p.dates.map((d,i)=>'<p>'+fmtDate(d)+' '+['entry','equipment'].filter(k=>r[k][i]>CasaFinance.paid(p,r.memberId,k,i)).map(k=>'<button class="btn btn-sm" onclick="App.recordFinancePayment(\''+r.memberId+'\',\''+k+'\','+i+')">'+(k==='entry'?'Entrada':'Equipo')+' '+fmtMoney(r[k][i]-CasaFinance.paid(p,r.memberId,k,i))+'</button>').join(' ')+'</p>').join('')+'</details>').join('')+'<h3>Pagos efectivos al crédito</h3>'+p.dates.map((d,i)=>'<p>'+fmtDate(d)+' · '+(p.providerPayments.some(x=>!x.voided&&x.index===i)?'Pagado al proveedor':'<button class="btn btn-sm" onclick="App.recordFinancePayment(\'\',\'provider\','+i+')">Registrar pago '+fmtMoney(p.rows.reduce((s,r)=>s+r.equipment[i],0))+'</button>')+'</p>').join('')+'<h3>Historial de pagos</h3>'+[...p.payments,...p.providerPayments.map(x=>({...x,kind:'provider'}))].map(x=>'<p>'+esc(x.kind==='provider'?'Proveedor':name(x.memberId))+' · '+esc(x.kind==='entry'?'Entrada':x.kind==='equipment'?'Equipo':'Crédito')+' · '+fmtDate(x.date)+' · '+fmtMoney(x.amount)+(x.voided?' · Anulado':' <button class="btn btn-sm" onclick="App.undoFinancePayment(\''+x.id+'\')">Anular abono</button>')+'</p>').join('')+'</details>':'')+'</div>';
+}
+function openFinanceSetup(){
+ if(accountRole!=='admin')throw Error('Solo el administrador configura los saldos iniciales');
+ if(state.settings.financePlan)throw Error('Ya hay un plan de apertura registrado');
+ const opts=activeMembers().map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('');
+ openModal('<div class="modal-header"><h3>Configurar saldos iniciales</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body"><p>Este plan es compartido y no borra registros de prueba ni modifica Servicios. Antes de guardarlo revisa quién adelantó el dinero, los importes y los abonos ya realizados.</p><div class="field"><label>Quién adelantó la entrada y el equipo</label><select id="fpCreditor">'+opts+'</select></div><div class="field"><label>Primera cuota (día 15)</label><input type="date" id="fpStart"></div><div class="field"><label>Total del equipo sin intereses</label><input id="fpEquipment" type="number" min="0" step="0.01"></div><div class="field"><label>Cuota mensual del equipo por persona (última ajusta centavos)</label><input id="fpMonthly" type="number" min="0" step="0.01"></div>'+[0,1,2].map(i=>'<fieldset class="fp-row"><legend>Integrante '+(i+1)+'</legend><label>Integrante<select class="fp-member">'+opts+'</select></label><label>Aportación original de entrada<input class="fp-entry" type="number" min="0" step="0.01"></label><label>Renta corriente mensual (referencia)<input class="fp-rent" type="number" min="0" step="0.01"></label></fieldset>').join('')+'<label><input type="checkbox" id="fpFirstPaid"> Los tres ya cubrieron la primera cuota de entrada y equipo. Esto NO confirma el pago al crédito.</label><p>La aportación propia de quien adelantó no genera una deuda consigo mismo. Los ajustes de centavos van en la sexta cuota.</p><button class="btn btn-primary" onclick="App.saveFinanceSetup()">Revisar y guardar plan</button></div>');
+ document.querySelectorAll('.fp-member').forEach((el,i)=>el.selectedIndex=i);
+}
+
+/* ---------------- Deudas internas (viven dentro de "Cuentas") ---------------- */
+function debtPaidTotal(d){ return (d.payments||[]).reduce((s,p)=>s+(Number(p.amount)||0), 0); }
+function isDebtSettled(d){ return CasaCore.cents(debtPaidTotal(d)) >= CasaCore.cents(d.totalAmount||0); }
+function debtRowHtml(d){
+  const paid = debtPaidTotal(d);
+  const total = Number(d.totalAmount)||0;
+  const remaining = Math.max(0, total-paid);
+  const pct = total>0 ? Math.min(100, paid/total*100) : 0;
+  const settled = isDebtSettled(d);
+  const content = `
+    <div class="${settled?'':'swipe-content '}list-item">
+      <div class="list-icon" style="${settled?'background:var(--good-soft);color:var(--good);':''}">${icon(settled?'check':'wallet')}</div>
+      <div class="list-main">
+        <div class="list-title">${esc(d.name)}${settled?' <span class="badge badge-good" style="margin-left:6px;">Saldada</span>':''}</div>
+        <div class="list-sub">${esc(d.fromName||'—')} le debe a ${esc(d.toName||'—')} · ${settled?'cubierto por completo':fmtMoney(remaining)+' por cubrir'}</div>
+        <div class="progress" style="margin-top:7px; max-width:260px;"><span style="width:${pct}%; ${settled?'background:var(--good);':''}"></span></div>
+      </div>
+      <div class="list-end" style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+        <span style="font-weight:700;">${fmtMoney(paid)} <span style="font-weight:400;color:var(--ink-faint);font-size:11px;">de ${fmtMoney(total)}</span></span>
+        <div style="display:flex; gap:4px;">
+          <button class="btn btn-sm btn-ghost" onclick="App.openDebtHistory('${d.id}')" title="Ver abonos">${icon('chart')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.openDebtForm('${d.id}')" title="Editar">${icon('edit')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteDebt('${d.id}')" title="Eliminar">${icon('trash')}</button>
+        </div>
+      </div>
+    </div>`;
+  if(settled) return content; // ya saldada: no hay nada que abonar, así que no lleva swipe
+  return `<div class="swipe-row">
+    <div class="swipe-action swipe-action-left" onclick="App.confirmDeleteDebt('${d.id}')">${icon('trash')}<span>Eliminar</span></div>
+    <div class="swipe-action swipe-action-right" onclick="App.openDebtPayment('${d.id}')">${icon('plus')}<span>Abonar</span></div>
+    ${content}
+  </div>`;
+}
+function deudasBody(){
+  const all = state.debts.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+  const active = all.filter(d=>!isDebtSettled(d));
+  const settled = all.filter(d=>isDebtSettled(d));
+  return `
+    <div class="panel">
+      <p class="page-sub">Estas deudas anteriores y adelantos de compras son visibles para toda la casa. Para nuevos préstamos personales usa Préstamos privados.</p><div class="panel-body pad0">
+        ${active.length ? `<div class="swipe-list">${active.map(debtRowHtml).join('')}</div>` : emptyBlock('wallet', 'No hay deudas internas activas. Agrega la primera con "Nueva deuda".')}
+      </div>
+    </div>
+    ${settled.length ? `<div class="panel" style="margin-top:14px; opacity:.75;">
+      <div class="panel-header"><div class="panel-title">Saldadas</div></div>
+      <div class="panel-body pad0"><div class="swipe-list">${settled.map(debtRowHtml).join('')}</div></div>
+    </div>` : ''}
+  `;
+}
+
+/* ---------------- PAGE: recordatorios ---------------- */
+function pageRecordatorios(){
+  const manual = state.reminders.slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+  const autoBills = dueSoonBills(60).map(b=>({title:'Pagar '+b.name, dueDate:b.nextDueDate, auto:true, kind:'bill', ref:b}));
+  const autoStock = lowStockItems().map(it=>({title:'Reponer '+it.name, dueDate:todayISO(), auto:true, kind:'stock', ref:it}));
+  const all = [...manual.map(r=>({...r, auto:false})), ...autoBills, ...autoStock];
+
+  // Agrupamos por mes calendario real (no por "próximos 31 días"), para que un
+  // pendiente de inicios del siguiente mes no aparezca bajo el encabezado
+  // "Este mes" mientras todavía estamos en el mes anterior.
+  const todayDt = new Date(todayISO()+'T00:00:00');
+  const curY = todayDt.getFullYear(), curM = todayDt.getMonth();
+  const weekEndDt = new Date(todayDt); weekEndDt.setDate(weekEndDt.getDate()+7);
+  const weekEndIso = weekEndDt.toISOString().slice(0,10);
+  const monthEndDt = new Date(curY, curM+1, 0);
+  const monthEndIso = monthEndDt.toISOString().slice(0,10);
+
+  const groups = {vencidos:[], hoy:[], semana:[], mes:[], futuro:[]};
+  all.forEach(r=>{
+    if(r.done){ return; }
+    const dueIso = r.dueDate||todayISO();
+    const d = daysBetween(todayISO(), dueIso);
+    const dueDt = new Date(dueIso+'T00:00:00');
+    const sameMonth = dueDt.getFullYear()===curY && dueDt.getMonth()===curM;
+    if(d<0) groups.vencidos.push(r);
+    else if(d===0) groups.hoy.push(r);
+    else if(d<=7) groups.semana.push(r);
+    else if(sameMonth) groups.mes.push(r);
+    else groups.futuro.push(r);
+  });
+  const done = manual.filter(r=>r.done);
+  const sec = (title,arr)=> arr.length? `<div class="panel" style="margin-bottom:12px;">
     <div class="panel-header"><div class="panel-title">${title}</div></div>
     <div class="panel-body pad0">${arr.map(reminderRow).join('')}</div></div>` : '';
   return `
