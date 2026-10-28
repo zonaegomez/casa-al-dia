@@ -25,8 +25,25 @@ function requireEmulator(db){
 function archived(data,archiveId){return {...data,archived:true,voided:true,testArchiveId:archiveId};}
 async function rehearse(db,backup,apply,codec){
  requireEmulator(db);
+ return archiveSnapshot(db,backup,apply,codec,'emulator');
+}
+function backupDigest(backup){return createHash('sha256').update(JSON.stringify(backup)).digest('hex');}
+function validateStaging(db,backup,apply,confirmation){
+ if(process.env.FIRESTORE_EMULATOR_HOST||db.projectId!=='casa-al-dia-staging'||backup.projectId!==db.projectId)throw Error('Solo se permite el proyecto staging explícito, sin emulador');
+ const reviewed={purchases:5,items:3,movements:50,bills:3,billReceipts:4,billPayments:8,settlements:1,closedCycles:1};
+ const {counts}=buildPlan(backup);
+ if(!isDeepStrictEqual(counts,reviewed)||Object.values(backup.collections).reduce((n,docs)=>n+docs.length,0)!==129)throw Error('El respaldo no coincide con el alcance revisado de 75 registros');
+ if(!backup.collections.settings.find(d=>d.id==='config')?.data.financePlan)throw Error('Falta el plan de pagos que debe conservarse');
+ if(apply&&confirmation!==backupDigest(backup))throw Error('La aplicación requiere confirmar la huella del respaldo revisado');
+}
+async function archiveReviewedStaging(db,backup,apply,codec,confirmation){
+ validateStaging(db,backup,apply,confirmation);
+ return archiveSnapshot(db,backup,apply,codec,'staging');
+}
+async function archiveSnapshot(db,backup,apply,codec,target){
  const {targets,counts}=buildPlan(backup);
- const archiveId='test-archive-'+createHash('sha256').update(JSON.stringify(backup)).digest('hex').slice(0,24);
+ const archiveId='test-archive-'+backupDigest(backup).slice(0,24);
+ const kind=target==='emulator'?'test-archive-rehearsal':'reviewed-test-data-archive';
  const archiveRef=db.doc('operations/'+archiveId);
  let repeated=false;
  await db.runTransaction(async tx=>{
@@ -42,11 +59,11 @@ async function rehearse(db,backup,apply,codec){
   }
   if(repeated){
    const saved=codec.encode(marker.data());
-   if(saved.kind!=='test-archive-rehearsal'||saved.sourceProject!==backup.projectId||!isDeepStrictEqual(saved.originals,targets))throw Error('Historial del ensayo inconsistente');
+   if(saved.kind!==kind||saved.sourceProject!==backup.projectId||!isDeepStrictEqual(saved.originals,targets))throw Error('Historial del archivado inconsistente');
   }
   if(!apply||repeated)return;
   for(const d of targets)tx.update(db.doc(d.collection+'/'+d.id),{archived:true,voided:true,testArchiveId:archiveId});
-  tx.create(archiveRef,codec.decode({kind:'test-archive-rehearsal',sourceProject:backup.projectId,sourceCreatedAt:backup.createdAt||null,originals:targets}));
+  tx.create(archiveRef,codec.decode({kind,sourceProject:backup.projectId,sourceCreatedAt:backup.createdAt||null,originals:targets}));
  });
  if(apply){
   // Verify every document, including protected data, after the atomic operation.
@@ -57,7 +74,7 @@ async function rehearse(db,backup,apply,codec){
    for(const d of backup.collections[name])if(!isDeepStrictEqual(actual.get(d.id),SELECTED.includes(name)?archived(d.data,archiveId):d.data))throw Error('Verificación de contenido falló: '+name);
   }
  }
- return {mode:apply?'emulator-applied':'dry-run',repeated,counts,documents:targets.length,protectedUnchanged:true};
+ return {mode:apply?target+'-applied':'dry-run',target:db.projectId,backupSha256:backupDigest(backup),repeated,counts,documents:targets.length,protectedUnchanged:true};
 }
 if(require.main===module){(async()=>{
  const args=process.argv.slice(2),file=args[0];
@@ -70,4 +87,4 @@ if(require.main===module){(async()=>{
  try{const result=await rehearse(db,backup,args.includes('--apply'),require('./codec'));console.table(result.counts);console.log(JSON.stringify({...result,counts:undefined}));}
  finally{await db.terminate();}
 })().catch(()=>{console.error('Ensayo no completado. Comprueba emulador, respaldo y coincidencia de registros. No uses este script contra Firebase real.');process.exitCode=1;});}
-module.exports={buildPlan,rehearse,SELECTED,ALL};
+module.exports={buildPlan,rehearse,archiveReviewedStaging,validateStaging,backupDigest,SELECTED,ALL};

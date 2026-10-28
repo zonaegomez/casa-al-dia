@@ -18,3 +18,21 @@ La operación es atómica, verifica las quince colecciones contra el respaldo an
 Los cierres históricos conservan sus documentos: quedan fuera de las listas activas mediante voided, pero el bloqueo de escritura de ese periodo permanece. El ensayo no reabre un ciclo cerrado.
 
 Las pruebas del módulo cubren aislamiento del emulador, datos nuevos, preservación de originales y datos protegidos, modo sin escritura e idempotencia. No sustituyen comprobar el ensayo con el respaldo real ni revisar el comportamiento visual de la aplicación. El respaldo no debe subirse al repositorio.
+
+## Aplicación revisada en staging
+
+`scripts/archive-reviewed-staging.js` es una entrada separada que reutiliza la misma transacción comprobada en el emulador. Solo acepta el origen y destino casa-al-dia-staging, sin variable de emulador. Usa ADC; no se deben copiar credenciales al chat ni al repositorio. Requiere exactamente el alcance revisado de 75 documentos de prueba, un respaldo de 129 documentos y el plan de pagos presente. Estos conteos son barreras adicionales, no un clasificador: la selección se basa en el respaldo previamente revisado por la persona responsable.
+
+Primero comprobar, sin escribir:
+
+```sh
+node scripts/archive-reviewed-staging.js /ruta/privada/respaldo.json --project casa-al-dia-staging
+```
+
+Solo después de revisar la salida y decidir aplicar el archivado, usar la huella backupSha256 de esa salida:
+
+```sh
+node scripts/archive-reviewed-staging.js /ruta/privada/respaldo.json --project casa-al-dia-staging --apply --confirm HUELLA_DE_64_CARACTERES
+```
+
+La huella no es una contraseña: vincula la decisión al contenido exacto del respaldo revisado. Dentro de una sola transacción, cada colección se compara con el respaldo; cualquier alta, baja o cambio detiene la operación antes de escribir. La sesión Google debe tener permisos de lectura y, para --apply, de escritura en Firestore staging. No se modifican permisos ni se buscan credenciales alternativas. Producción siempre se rechaza. Si después del commit falla la verificación por un cambio concurrente, el comando puede terminar con error aunque el archivado ya esté hecho: comprobar el estado antes de repetir; no revierte operaciones automáticamente.

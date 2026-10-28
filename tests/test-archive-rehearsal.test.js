@@ -37,3 +37,25 @@ test('new or edited records prevent all writes',async()=>{
  try{const b=fixture(),f=fakeDb(b);f.rows.set('movements/new',{total:12});await assert.rejects(rehearse(f.db,b,true,codec),/Cantidad distinta/);assert.equal(f.writes(),0);}
  finally{if(old===undefined)delete process.env.FIRESTORE_EMULATOR_HOST;else process.env.FIRESTORE_EMULATOR_HOST=old;}
 });
+test('reviewed staging scope requires exact counts, project, preserved plan and explicit matching digest',async()=>{
+ const {archiveReviewedStaging,backupDigest,validateStaging}=require('../scripts/rehearse-test-archive');
+ const {parseArgs}=require('../scripts/archive-reviewed-staging');
+ const old=process.env.FIRESTORE_EMULATOR_HOST;delete process.env.FIRESTORE_EMULATOR_HOST;
+ try{
+  assert.throws(()=>parseArgs(['file.json','--project','production']));
+  assert.throws(()=>parseArgs(['file.json','--project','casa-al-dia-staging','--apply']));
+  const b=fixture();b.projectId='casa-al-dia-staging';
+  const counts={purchases:5,items:3,movements:50,bills:3,billReceipts:4,billPayments:8,settlements:1,closedCycles:1,access:3,settings:1,members:3,operations:46,privateLoans:1};
+  for(const [name,count]of Object.entries(counts))b.collections[name]=Array.from({length:count},(_,i)=>({id:'fixture-'+i,data:{value:i}}));
+  b.collections.settings=[{id:'config',data:{financePlan:{payments:[{amount:1}]}}}];
+  const f=fakeDb(b);f.db.projectId='casa-al-dia-staging';
+  const summary=await archiveReviewedStaging(f.db,b,false,codec);assert.equal(summary.documents,75);assert.equal(f.writes(),0);
+  await assert.rejects(archiveReviewedStaging(f.db,b,true,codec,'0'.repeat(64)),/huella/);assert.equal(f.writes(),0);
+  assert.throws(()=>validateStaging({projectId:'production'},b,false),/staging/);
+  process.env.FIRESTORE_EMULATOR_HOST='127.0.0.1:8088';assert.throws(()=>validateStaging(f.db,b,false),/emulador/);delete process.env.FIRESTORE_EMULATOR_HOST;
+  const result=await archiveReviewedStaging(f.db,b,true,codec,backupDigest(b));assert.equal(result.mode,'staging-applied');assert.equal(f.writes(),76);
+  assert.deepEqual(f.rows.get('settings/config'),b.collections.settings[0].data);
+  const before=f.writes();await archiveReviewedStaging(f.db,b,true,codec,backupDigest(b));assert.equal(f.writes(),before);
+  const changed=structuredClone(b);changed.collections.movements.pop();assert.throws(()=>validateStaging(f.db,changed,false),/alcance/);
+ }finally{if(old===undefined)delete process.env.FIRESTORE_EMULATOR_HOST;else process.env.FIRESTORE_EMULATOR_HOST=old;}
+});
