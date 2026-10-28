@@ -62,4 +62,10 @@ npm run test:browser
 
 Esta rama incorpora las correcciones del PR #1 sobre main `b251099`, conservando tickets agrupados, gastos espontáneos, pagos entre varios y lectura de fecha/tienda. Las vistas de servicios/compras filtran reportes; no generan saldos independientes. Las reposiciones se pueden posponer siete días. Los precios se comparan con promedio ponderado por cantidad.
 
-La validación local no activa producción. Firebase y Vercel necesitan conexiones administrativas confirmadas; ver ACTIVACION. No fusionar simultáneamente el PR antiguo: esta entrega lo reemplaza funcionalmente.
+La validación local no activa producción. Ejecutar tareas administrativas requiere una sesión o credenciales verificadas en el entorno que las ejecuta; ni este README ni una conexión a GitHub conceden acceso a Firebase o Vercel. Ver ACTIVACION. No fusionar simultáneamente el PR antiguo: esta entrega lo reemplaza funcionalmente.
+
+
+## Acceso para respaldos
+
+El respaldo completo de Firestore se prepara con `scripts/backup.js`; incluye planes guardados en `settings`, préstamos privados y auditoría. Puede usar las credenciales del entorno del servidor o una sesión Google con Application Default Credentials (ADC), con proyecto explícito. Consultar [Respaldo con acceso autorizado](docs/RESPALDO.md). La existencia del script y las pruebas automatizadas no acreditan que haya acceso administrativo ni que se haya creado un respaldo real.
+
