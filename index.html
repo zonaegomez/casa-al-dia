@@ -2232,7 +2232,7 @@ function modalTicket(prefillItemIds, scannedLines, scanMeta){
         <select id="tkKind">${Object.keys(TICKET_KINDS).map(k=>`<option value="${k}">${TICKET_KINDS[k].label}</option>`).join('')}</select>
       </div>
       <datalist id="storeSuggestions">${STORE_SUGGESTIONS.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
-      <div class="field"><label>Total pagado del ticket (debe coincidir con las líneas)</label><input id="tkExpectedTotal" type="number" step="0.01" min="0" required></div><div id="ticketRows">${rowsHtml}</div>
+      <div class="field"><label>Total pagado del ticket (debe coincidir con las líneas)</label><input id="tkExpectedTotal" type="number" step="0.01" min="0" required oninput="App.updateTicketTotal()"></div><div id="tkReconciliation" role="status" aria-live="polite"></div>${scanMeta?.warnings?.length?'<p role="alert">'+scanMeta.warnings.map(w=>esc(w)).join('<br>')+'</p>':''}${scanMeta?.discountsApplied?'<p>Se integraron '+Number(scanMeta.discountsApplied)+' rebajas al precio final de sus productos. Revísalos antes de guardar.</p>':''}<div id="ticketRows">${rowsHtml}</div>
       <button class="btn btn-sm" style="margin-top:6px;" onclick="App.addTicketRow()">${icon('plus')} Agregar línea</button>
       <div style="display:flex; justify-content:flex-end; align-items:baseline; gap:8px; margin-top:14px; font-weight:700; font-size:16px;">Total del ticket <span id="tkTotal">${fmtMoney(0)}</span></div>
       ${beneficiaryFields('tk')}
@@ -2596,6 +2596,9 @@ window.App = {
     document.querySelectorAll('.tkCost').forEach(inp=>{ total += Number(inp.value)||0; });
     const el = document.getElementById('tkTotal');
     if(el) el.textContent = fmtMoney(total);
+    const expected=document.getElementById('tkExpectedTotal'),status=document.getElementById('tkReconciliation');
+    if(expected&&status){if(expected.value===''){status.textContent='Captura el total pagado para comprobar la suma.';}else{const difference=CasaCore.cents(total)-CasaCore.cents(expected.value);status.textContent=difference===0?'La suma de productos coincide con el total pagado.':(difference>0?'Sobran ':'Faltan ')+fmtMoney(Math.abs(difference)/100)+' en las líneas. Revisa descuentos, cantidades e importes antes de guardar.';status.style.color=difference===0?'var(--ink-soft)':'var(--bad)';}}
+
   },
   openTicketScan(){
     const el = document.getElementById('ticketPhotoInput');
@@ -2647,8 +2650,8 @@ window.App = {
         const match = findBestItemMatch(l.name, items);
         return { itemId: match?match.id:null, name: l.name, price: Number(l.price)||0 };
       });
-      modalTicket(null,scannedLines,{date:payload.date,store:payload.store});
-      document.getElementById('tkExpectedTotal').value=CasaCore.money(payload.total);
+      modalTicket(null,scannedLines,{date:payload.date,store:payload.store,warnings:payload.warnings,discountsApplied:payload.discountsApplied});
+      document.getElementById('tkExpectedTotal').value=CasaCore.money(payload.total);App.updateTicketTotal();
       toast(scannedLines.length+' producto(s) detectados — revísalos antes de guardar');
     }catch(e){
       closeModal();
