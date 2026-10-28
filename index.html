@@ -1730,7 +1730,7 @@ function pageCuentas(){
   const activeDebts = state.debts.filter(d=>!d.archived&&!isDebtSettled(d));
   const titleByTab = {plan:'Mi plan de pagos', gastos:'Gastos', saldos:'Saldo entre integrantes', deudas:'Deudas de compras', prestamos:'Préstamos privados'};
   const subByTab = {
-    plan:'Renta de referencia, adelantos de entrada y equipo a seis cuotas.',
+    plan:'Tus aportaciones, cuotas y saldos pendientes en los planes de la casa.',
     gastos: rows.length+' movimiento(s) · total '+fmtMoney(total),
     saldos: 'Saldo acumulado de compras y servicios; los pagos al proveedor pendientes se consultan en Servicios',
     prestamos:'Solo participan las dos cuentas involucradas. No se suma a los gastos de la casa.',
@@ -1769,28 +1769,61 @@ function pageCuentas(){
   `;
 }
 
-/* Opening finance plans are household records, not private personal finances. */
+/* Household plans are shared records. Each account sees its own summary. */
 function financePlansBody(){
  const p=state.settings.financePlan,name=id=>state.members.find(m=>m.id===id)?.name||'Integrante';
- if(!p)return '<div class="card" style="padding:20px"><h2>Mi plan de pagos</h2><p>Separa los adelantos de entrada y el equipo de los gastos diarios. Los abonos no vuelven a sumar como gasto.</p><p>Los planes de la casa son compartidos. Los préstamos privados permanecen en su propia sección.</p>'+(accountRole==='admin'?'<button class="btn btn-primary" onclick="App.openFinanceSetup()">Configurar saldos iniciales</button>':'<p>El administrador debe configurar los saldos iniciales.</p>')+'</div>';
+ if(!p)return `<div class="card" style="padding:20px"><h2>Mi plan de pagos</h2><p>Organiza lo que cada persona debe devolver por un adelanto o aportar para una compra a plazos.</p><p>Por ejemplo: alguien pagó una mudanza por todos, o compraron un refrigerador con crédito. Elige participantes, conceptos y número de cuotas.</p><p>Los abonos no generan otro gasto. Este plan es compartido; los préstamos privados tienen su propia sección.</p>${accountRole==='admin'?'<button class="btn btn-primary" onclick="App.openFinanceSetup()">Crear plan de pagos</button>':'<p>El administrador puede crear el plan de pagos de la casa.</p>'}</div>`;
  if(!accountMemberId)return emptyBlock('wallet','Tu cuenta debe estar vinculada a un integrante.');
- const row=p.rows.find(r=>r.memberId===accountMemberId);if(!row)return emptyBlock('wallet','No tienes cuotas en este plan.');
- const period=(state.financeMonth||todayISO().slice(0,7)),index=p.dates.findIndex(d=>d.slice(0,7)===period);
- const own=kind=>index<0?0:row[kind][index],paid=kind=>index<0?0:CasaFinance.paid(p,row.memberId,kind,index);
- const creditor=p.creditorId===accountMemberId;
- const before=period<p.dates[0].slice(0,7),after=period>p.dates[5].slice(0,7);
- return '<div class="card" style="padding:20px"><h2>Mi plan de pagos · '+esc(name(accountMemberId))+'</h2><label>Mes <input type="month" value="'+esc(period)+'" onchange="App.setFinanceMonth(this.value)"></label><p>Plan de '+fmtDate(p.dates[0])+' a '+fmtDate(p.dates[5])+'. Renta corriente de referencia: <strong>'+fmtMoney(row.rent)+'</strong>. Sus recibos y pagos se consultan en Servicios.</p>'+(index>=0?'<p>Aportación prevista: <strong>'+fmtMoney(row.rent+own('entry')+own('equipment'))+'</strong> más servicios y compras.</p>':after?'<p>El calendario de seis cuotas terminó. Cualquier saldo sin pagar sigue pendiente.</p>':before?'<p>El plan todavía no comienza en el mes seleccionado.</p>':'')+
- '<div style="overflow-x:auto"><table><thead><tr><th>Obligación</th><th>Cuota del mes</th><th>Abonado del mes</th><th>Falta del mes</th><th>Saldo total pendiente</th></tr></thead><tbody>'+['entry','equipment'].map(k=>'<tr><td>'+(k==='entry'?'Adelanto de entrada':'Lavadora y secadora')+'</td><td>'+fmtMoney(own(k))+'</td><td>'+fmtMoney(paid(k))+'</td><td>'+fmtMoney(Math.max(0,own(k)-paid(k)))+'</td><td>'+fmtMoney(CasaFinance.remaining(p,row,k))+'</td></tr>').join('')+'</tbody></table></div><p>Estos abonos no están incluidos en el saldo de compras y servicios. Aquí solo se controlan los planes iniciales.</p>'+
- (creditor?'<h3>Por recuperar</h3>'+p.rows.filter(r=>r.memberId!==p.creditorId).map(r=>'<p>'+esc(name(r.memberId))+': adelanto '+fmtMoney(CasaFinance.remaining(p,r,'entry'))+' · equipo '+fmtMoney(CasaFinance.remaining(p,r,'equipment'))+'</p>').join('')+'<h3>Crédito del equipo</h3><p>Entregar dinero a quien administra el crédito no lo marca como pagado al proveedor.</p><p>Saldo al proveedor: '+fmtMoney(p.equipmentTotal-p.providerPayments.filter(x=>!x.voided).reduce((s,x)=>s+x.amount,0))+'</p>':'')+
- '<details><summary>Calendario y abonos registrados</summary>'+p.dates.map((d,i)=>'<p>'+fmtDate(d)+' · entrada '+fmtMoney(row.entry[i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,'entry',i))+' · equipo '+fmtMoney(row.equipment[i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,'equipment',i))+'</p>').join('')+'<p>Los abonos de apertura confirman aportaciones entre integrantes; no confirman el pago al crédito.</p></details>'+
- (accountRole==='admin'?'<details><summary>Administrar cuotas de la casa</summary><p>Registra únicamente pagos efectivamente realizados. Las cuotas iniciales confirmadas se conservarán en el historial.</p>'+p.rows.map(r=>'<details><summary>'+esc(name(r.memberId))+'</summary>'+p.dates.map((d,i)=>'<p>'+fmtDate(d)+' '+['entry','equipment'].filter(k=>r[k][i]>CasaFinance.paid(p,r.memberId,k,i)).map(k=>'<button class="btn btn-sm" onclick="App.recordFinancePayment(\''+r.memberId+'\',\''+k+'\','+i+')">'+(k==='entry'?'Entrada':'Equipo')+' '+fmtMoney(r[k][i]-CasaFinance.paid(p,r.memberId,k,i))+'</button>').join(' ')+'</p>').join('')+'</details>').join('')+'<h3>Pagos efectivos al crédito</h3>'+p.dates.map((d,i)=>'<p>'+fmtDate(d)+' · '+(p.providerPayments.some(x=>!x.voided&&x.index===i)?'Pagado al proveedor':'<button class="btn btn-sm" onclick="App.recordFinancePayment(\'\',\'provider\','+i+')">Registrar pago '+fmtMoney(p.rows.reduce((s,r)=>s+r.equipment[i],0))+'</button>')+'</p>').join('')+'<h3>Historial de pagos</h3>'+[...p.payments,...p.providerPayments.map(x=>({...x,kind:'provider'}))].map(x=>'<p>'+esc(x.kind==='provider'?'Proveedor':name(x.memberId))+' · '+esc(x.kind==='entry'?'Entrada':x.kind==='equipment'?'Equipo':'Crédito')+' · '+fmtDate(x.date)+' · '+fmtMoney(x.amount)+(x.voided?' · Anulado':' <button class="btn btn-sm" onclick="App.undoFinancePayment(\''+x.id+'\')">Anular abono</button>')+'</p>').join('')+'</details>':'')+'</div>';
+ const row=p.rows.find(r=>r.memberId===accountMemberId);if(!row)return emptyBlock('wallet','No participas en este plan.');
+ const labels={entry:p.entryLabel||'Saldo por devolver',equipment:p.equipmentLabel||'Compra financiada'};
+ const period=state.financeMonth||todayISO().slice(0,7),index=p.dates.findIndex(d=>d.slice(0,7)===period),last=p.dates.at(-1);
+ const own=k=>index<0?0:row[k][index],paid=k=>index<0?0:CasaFinance.paid(p,row.memberId,k,index);
+ const creditor=p.creditorId===accountMemberId,hasExternal=p.equipmentTotal>0;
+ const kinds=['entry','equipment'].filter(k=>p.rows.some(r=>r[k].some(n=>n>0)));
+ const externalAmount=i=>p.rows.reduce((s,r)=>s+r.equipment[i],0);
+ return `<div class="card" style="padding:20px"><h2>Mi plan de pagos · ${esc(name(accountMemberId))}</h2>
+ <label>Mes <input type="month" value="${esc(period)}" onchange="App.setFinanceMonth(this.value)"></label>
+ <p>${p.dates.length} cuota(s) mensuales, del ${fmtDate(p.dates[0])} al ${fmtDate(last)}. Responsable del adelanto: ${esc(name(p.creditorId))}.</p>
+ ${row.rent?`<p>Gasto fijo mensual de referencia: <strong>${fmtMoney(row.rent)}</strong>. Sus recibos y pagos se registran en Servicios; no se marcan pagados desde este plan.</p>`:''}
+ ${index>=0?`<p>Aportación prevista: <strong>${fmtMoney(row.rent+own('entry')+own('equipment'))}</strong>${row.rent?' (incluye la referencia mensual)':''}. Otros gastos de la casa se suman aparte.</p>`:period>last.slice(0,7)?'<p>El calendario terminó. Cualquier saldo sin pagar sigue pendiente.</p>':'<p>El plan todavía no comienza en el mes seleccionado.</p>'}
+ <div style="overflow-x:auto"><table><thead><tr><th>Concepto</th><th>Cuota del mes</th><th>Abonado del mes</th><th>Falta del mes</th><th>Saldo total pendiente</th></tr></thead><tbody>
+ ${kinds.map(k=>`<tr><td>${esc(labels[k])}</td><td>${fmtMoney(own(k))}</td><td>${fmtMoney(paid(k))}</td><td>${fmtMoney(Math.max(0,own(k)-paid(k)))}</td><td>${fmtMoney(CasaFinance.remaining(p,row,k))}</td></tr>`).join('')}
+ </tbody></table></div><p>Los abonos de este plan reducen sus saldos pendientes y no vuelven a sumar en los gastos de la casa.</p>
+ ${creditor?`<h3>Por recuperar de otros integrantes</h3>${p.rows.filter(r=>r.memberId!==p.creditorId).map(r=>`<p>${esc(name(r.memberId))}: ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(CasaFinance.remaining(p,r,k))).join(' · ')}</p>`).join('')}
+ ${hasExternal?`<h3>Pago externo · ${esc(labels.equipment)}</h3><p>Recibir aportaciones de los integrantes no confirma el pago al banco, tienda o proveedor.</p><p>Saldo al proveedor: ${fmtMoney(p.equipmentTotal-p.providerPayments.filter(x=>!x.voided).reduce((s,x)=>s+x.amount,0))}</p>`:''}`:''}
+ <details><summary>Calendario y abonos registrados</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${kinds.map(k=>esc(labels[k])+' '+fmtMoney(row[k][i])+' / abonado '+fmtMoney(CasaFinance.paid(p,row.memberId,k,i))).join(' · ')}</p>`).join('')}
+ <p>Los abonos iniciales confirman aportaciones entre integrantes, no pagos externos.</p></details>
+ ${accountRole==='admin'?`<details><summary>Administrar cuotas de la casa</summary><p>Registra únicamente pagos efectivamente realizados. Las correcciones conservan el historial.</p>
+ <button class="btn btn-sm" onclick="App.renameFinancePlan()">Editar nombres de los conceptos</button>
+ ${p.rows.map(r=>`<details><summary>${esc(name(r.memberId))}</summary>${p.dates.map((d,i)=>`<p>${fmtDate(d)} ${kinds.filter(k=>r[k][i]>CasaFinance.paid(p,r.memberId,k,i)).map(k=>`<button class="btn btn-sm" onclick="App.recordFinancePayment('${r.memberId}','${k}',${i})">${esc(labels[k])} ${fmtMoney(r[k][i]-CasaFinance.paid(p,r.memberId,k,i))}</button>`).join(' ')}</p>`).join('')}</details>`).join('')}
+ ${hasExternal?`<h3>Pagos externos · ${esc(labels.equipment)}</h3>${p.dates.map((d,i)=>`<p>${fmtDate(d)} · ${p.providerPayments.some(x=>!x.voided&&x.index===i)?'Pagado al proveedor':`<button class="btn btn-sm" onclick="App.recordFinancePayment('','provider',${i})">Registrar pago ${fmtMoney(externalAmount(i))}</button>`}</p>`).join('')}`:''}
+ <h3>Historial de pagos</h3>${[...p.payments,...p.providerPayments.map(x=>({...x,kind:'provider'}))].map(x=>`<p>${esc(x.kind==='provider'?'Proveedor':name(x.memberId))} · ${esc(x.kind==='provider'?labels.equipment:labels[x.kind])} · ${fmtDate(x.date)} · ${fmtMoney(x.amount)}${x.voided?' · Anulado':` <button class="btn btn-sm" onclick="App.undoFinancePayment('${x.id}')">Anular abono</button>`}</p>`).join('')}</details>`:''}</div>`;
 }
 function openFinanceSetup(){
- if(accountRole!=='admin')throw Error('Solo el administrador configura los saldos iniciales');
- if(state.settings.financePlan)throw Error('Ya hay un plan de apertura registrado');
- const opts=activeMembers().map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('');
- openModal('<div class="modal-header"><h3>Configurar saldos iniciales</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body"><p>Este plan es compartido y no borra registros de prueba ni modifica Servicios. Antes de guardarlo revisa quién adelantó el dinero, los importes y los abonos ya realizados.</p><div class="field"><label>Quién adelantó la entrada y el equipo</label><select id="fpCreditor">'+opts+'</select></div><div class="field"><label>Primera cuota (día 15)</label><input type="date" id="fpStart"></div><div class="field"><label>Total del equipo sin intereses</label><input id="fpEquipment" type="number" min="0" step="0.01"></div><div class="field"><label>Cuota mensual del equipo por persona (última ajusta centavos)</label><input id="fpMonthly" type="number" min="0" step="0.01"></div>'+[0,1,2].map(i=>'<fieldset class="fp-row"><legend>Integrante '+(i+1)+'</legend><label>Integrante<select class="fp-member">'+opts+'</select></label><label>Aportación original de entrada<input class="fp-entry" type="number" min="0" step="0.01"></label><label>Renta corriente mensual (referencia)<input class="fp-rent" type="number" min="0" step="0.01"></label></fieldset>').join('')+'<label><input type="checkbox" id="fpFirstPaid"> Los tres ya cubrieron la primera cuota de entrada y equipo. Esto NO confirma el pago al crédito.</label><p>La aportación propia de quien adelantó no genera una deuda consigo mismo. Los ajustes de centavos van en la sexta cuota.</p><button class="btn btn-primary" onclick="App.saveFinanceSetup()">Revisar y guardar plan</button></div>');
- document.querySelectorAll('.fp-member').forEach((el,i)=>el.selectedIndex=i);
+ if(accountRole!=='admin')throw Error('Solo el administrador crea el plan');
+ if(state.settings.financePlan)throw Error('Ya hay un plan de pagos registrado');
+ const members=activeMembers();
+ openModal(`<div class="modal-header"><h3>Crear plan de pagos</h3><button class="btn" onclick="App.closeModal()">Cerrar</button></div><div class="modal-body">
+ <p>Usa este plan cuando alguien adelantó dinero o cuando comparten una compra a plazos. Es un registro compartido de la casa.</p>
+ <div class="field"><label>¿Quién adelantó el dinero o administra el crédito?</label><select id="fpCreditor">${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></div>
+ <div class="field"><label>Fecha de la primera cuota</label><input type="date" id="fpStart"></div>
+ <div class="field"><label>Número de cuotas mensuales</label><input id="fpCount" type="number" min="1" max="60" step="1" value="6"></div>
+ <p>Si la fecha cae en un día que no existe en otro mes, esa cuota vence el último día de ese mes.</p>
+ <fieldset class="field"><legend>Dinero que hay que devolver (opcional)</legend>
+ <label>Nombre del concepto<input id="fpEntryLabel" maxlength="80" placeholder="Ej. Adelanto de mudanza"></label>
+ <small>Abajo indica la parte original de cada persona. La parte propia de quien adelantó no genera una deuda consigo mismo. Si no aplica, usa cero.</small></fieldset>
+ <fieldset class="field"><legend>Compra financiada sin intereses (opcional)</legend>
+ <label>Nombre del concepto<input id="fpEquipmentLabel" maxlength="80" placeholder="Ej. Refrigerador"></label>
+ <label>Total de la compra<input id="fpEquipment" type="number" min="0" step="0.01" value="0"></label>
+ <label>Cuota mensual por persona (opcional)<input id="fpMonthly" type="number" min="0" step="0.01" placeholder="Se calcula si lo dejas vacío"></label>
+ <small>Se reparte en partes iguales entre quienes participan. La última cuota ajusta los centavos. Si existe un crédito, su pago externo se registra por separado.</small></fieldset>
+ <h3>¿Quiénes participan?</h3>
+ ${members.map((m,i)=>`<fieldset class="field fp-row"><legend><label><input type="checkbox" class="fp-include" checked> Incluir a ${esc(m.name)}</label></legend><input type="hidden" class="fp-member" value="${m.id}">
+ <label>Parte original de dinero adelantado<input class="fp-entry" type="number" min="0" step="0.01" value="0"></label>
+ <label>Gasto fijo mensual de referencia (opcional)<input class="fp-rent" type="number" min="0" step="0.01" value="0"></label>
+ <small>Por ejemplo, su parte de renta. Es una referencia para planear; no crea otro recibo ni confirma su pago.</small></fieldset>`).join('')}
+ <label><input type="checkbox" id="fpFirstPaid"> Todas las personas participantes ya cubrieron su primera cuota. Esto no confirma ningún pago externo.</label>
+ <p>Revisa los importes antes de guardar. Este formulario no borra registros anteriores ni crea gastos nuevos.</p><button class="btn btn-primary" onclick="App.saveFinanceSetup()">Revisar y guardar plan</button></div>`);
 }
 
 /* ---------------- Deudas internas (viven dentro de "Cuentas") ---------------- */
@@ -3002,11 +3035,18 @@ Object.assign(App,{
  openFinanceSetup,
  async saveFinanceSetup(){
   if(accountRole!=='admin')throw Error('Solo el administrador configura el plan');
-  const input={creditorId:document.getElementById('fpCreditor').value,startDate:document.getElementById('fpStart').value,equipmentTotal:Number(document.getElementById('fpEquipment').value),equipmentMonthly:Number(document.getElementById('fpMonthly').value),firstPaid:document.getElementById('fpFirstPaid').checked,rows:[...document.querySelectorAll('.fp-row')].map(el=>({memberId:el.querySelector('.fp-member').value,entryTotal:Number(el.querySelector('.fp-entry').value),rent:Number(el.querySelector('.fp-rent').value)}))};
+  const input={installmentCount:Number(document.getElementById('fpCount').value),entryLabel:document.getElementById('fpEntryLabel').value,equipmentLabel:document.getElementById('fpEquipmentLabel').value,creditorId:document.getElementById('fpCreditor').value,startDate:document.getElementById('fpStart').value,equipmentTotal:Number(document.getElementById('fpEquipment').value),equipmentMonthly:Number(document.getElementById('fpMonthly').value),firstPaid:document.getElementById('fpFirstPaid').checked,rows:[...document.querySelectorAll('.fp-row')].filter(el=>el.querySelector('.fp-include').checked).map(el=>({memberId:el.querySelector('.fp-member').value,entryTotal:Number(el.querySelector('.fp-entry').value),rent:Number(el.querySelector('.fp-rent').value)}))};
   const plan=CasaFinance.create(input,state.members),name=id=>state.members.find(m=>m.id===id)?.name||'Integrante';
   if(input.firstPaid&&input.startDate>todayISO())throw Error('No marques pagada una cuota futura');
-  if(!confirm('Guardar plan de seis cuotas desde '+fmtDate(plan.dates[0])+' hasta '+fmtDate(plan.dates[5])+'\n'+plan.rows.map(r=>name(r.memberId)+': deuda de entrada '+fmtMoney(r.entry.reduce((s,n)=>s+n,0))+'; parte del equipo '+fmtMoney(r.equipment.reduce((s,n)=>s+n,0))).join('\n')+'\nPrimera cuota entre integrantes: '+(input.firstPaid?'pagada':'pendiente')+'\nEl crédito queda pendiente de confirmar. ¿Guardar?'))return;
-  await Data.atomic(operationMeta('opening-finance-plan'),async t=>{if(t.config.financePlan)throw Error('Ya existe un plan de apertura');await t.put('settings','config',{financePlan:plan,revision:Number(t.config.revision||0)+1});});closeModal();toast('Plan de apertura registrado');
+  if(!confirm('Guardar plan de '+plan.dates.length+' cuotas desde '+fmtDate(plan.dates[0])+' hasta '+fmtDate(plan.dates.at(-1))+'\n'+plan.rows.map(r=>name(r.memberId)+': '+plan.entryLabel+' '+fmtMoney(r.entry.reduce((s,n)=>s+n,0))+'; '+plan.equipmentLabel+' '+fmtMoney(r.equipment.reduce((s,n)=>s+n,0))).join('\n')+'\nPrimera cuota entre integrantes: '+(input.firstPaid?'pagada':'pendiente')+'\nLos pagos externos quedan pendientes de confirmar. ¿Guardar?'))return;
+  await Data.atomic(operationMeta('opening-finance-plan'),async t=>{if(t.config.financePlan)throw Error('Ya existe un plan de pagos');await t.put('settings','config',{financePlan:plan,revision:Number(t.config.revision||0)+1});});closeModal();toast('Plan de pagos registrado');
+ },
+ async renameFinancePlan(){
+  if(accountRole!=='admin')throw Error('Solo el administrador cambia los nombres del plan');
+  const p=state.settings.financePlan;if(!p)throw Error('Plan no disponible');
+  const entry=prompt('Nombre del concepto de dinero por devolver',p.entryLabel||'Saldo por devolver');if(entry===null)return;
+  const equipment=prompt('Nombre de la compra financiada',p.equipmentLabel||'Compra financiada');if(equipment===null)return;
+  await Data.atomic({kind:'rename-finance-plan',opId:uid()},async t=>{if(!t.config.financePlan)throw Error('Plan no disponible');await t.put('settings','config',{financePlan:CasaFinance.rename(t.config.financePlan,entry,equipment),revision:Number(t.config.revision||0)+1});});toast('Nombres actualizados; importes y abonos conservados');
  },
  async undoFinancePayment(id){
   if(accountRole!=='admin')throw Error('Solo el administrador corrige los abonos');
@@ -3014,7 +3054,7 @@ Object.assign(App,{
   await Data.atomic({kind:'reverse-opening-plan-payment',opId:uid()},async t=>{const plan=t.config.financePlan;if(!plan)throw Error('Plan no disponible');const updated=CasaFinance.reverse(plan,id,t.id);await t.put('settings','config',{financePlan:updated,revision:Number(t.config.revision||0)+1});});toast('Abono anulado; saldo actualizado');
  },
  async recordFinancePayment(memberId,kind,index){
-  if(accountRole!=='admin')throw Error('Solo el administrador registra las cuotas de apertura');
+  if(accountRole!=='admin')throw Error('Solo el administrador registra las cuotas del plan');
   const plan=state.settings.financePlan;if(!plan)throw Error('Plan no disponible');
   const row=plan.rows.find(r=>r.memberId===memberId),amount=kind==='provider'?plan.rows.reduce((s,r)=>s+r.equipment[index],0):row[kind][index]-CasaFinance.paid(plan,memberId,kind,index);
   const date=prompt('Fecha del pago real (AAAA-MM-DD)',todayISO());if(date===null)return;if(date>todayISO())throw Error('No registres pagos futuros');

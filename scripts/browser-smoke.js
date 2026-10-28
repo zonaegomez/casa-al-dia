@@ -89,6 +89,8 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
    q.financeIdentity('a','admin');App.setCuentasTab('plan');App.openFinanceSetup();
   });
   assert.ok(await page.locator('#fpStart').isVisible());assert.equal(await page.locator('.fp-row').count(),3);
+  assert.ok(await page.locator('#fpCount').isVisible());assert.ok(await page.locator('#fpEntryLabel').isVisible());assert.ok(await page.locator('#fpEquipmentLabel').isVisible());assert.equal(await page.locator('.fp-include').count(),3);
+  assert.ok(!(await page.locator('#modalRoot').innerText()).includes('Lavadora y secadora'));
   await page.evaluate(()=>{const q=window.__qa;App.closeModal();q.state.settings={...q.state.settings,financePlan:CasaFinance.create({creditorId:'c',startDate:'2026-10-15',equipmentTotal:600.01,equipmentMonthly:33.33,firstPaid:true,rows:[{memberId:'a',entryTotal:1000,rent:300},{memberId:'b',entryTotal:1100,rent:350},{memberId:'c',entryTotal:1200,rent:400}]},q.state.members)};App.setFinanceMonth('2026-10');});
   assert.ok((await page.locator('#main').innerText()).includes('Mi plan de pagos · Persona A'));
   assert.ok((await page.locator('#main').innerText()).includes('$833.33'));
