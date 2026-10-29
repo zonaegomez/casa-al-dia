@@ -1,4 +1,5 @@
 const C=require('../core');
+const {offset}=require('./loan-offset');
 function error(message,status=400){throw Object.assign(Error(message),{status});}
 const validId=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,120}$/.test(x);
 function amount(value){let n;try{n=C.cents(value);}catch{error('Importe inválido');}if(!Number.isSafeInteger(n)||n<=0||n>=10000000000)error('Importe inválido');return n;}
@@ -20,7 +21,7 @@ function transition(loan,uid,input,now){
   next.payments.push({id:input.operationId,amountCents:cents,status:'pending',reportedAt:now});
  }else if(['confirm-payment','reject-payment'].includes(input.action)){
   if(loan.status!=='active'||uid!==loan.lenderUid)error('Solo quien prestó puede confirmar la recepción del abono',403);
-  const p=next.payments.find(p=>p.id===input.paymentId&&p.status==='pending');if(!p)error('Abono pendiente no disponible',409);
+  const p=next.payments.find(p=>p.id===input.paymentId&&p.status==='pending');if(!p||p.kind==='offset')error('Abono pendiente no disponible',409);
   p.status=input.action==='confirm-payment'?'confirmed':'rejected';p.resolvedAt=now;
   if(outstanding(next)===0)next.status='settled';
  }else error('Acción inválida');
@@ -43,7 +44,7 @@ async function operate(db,uid,input){
     if(loan.createdBy!==uid||loan.events[0].id!==input.operationId)error('Identificador ocupado',409);
     return {loanId:input.loanId,status:loan.status};
    }
-   next=transition(loan,uid,input,now);
+   next=['propose-offset','confirm-offset','reject-offset'].includes(input.action)?await offset(db,tx,uid,input,loan,now):transition(loan,uid,input,now);
   }else{
    if(input.action!=='create')error('Préstamo no disponible',404);
    if(!validId(input.otherMemberId)||input.otherMemberId===binding||!['lend','borrow'].includes(input.direction))error('Elige otra persona y quién prestó');
@@ -59,3 +60,4 @@ async function operate(db,uid,input){
  });
 }
 module.exports={operate,transition,outstanding};
+

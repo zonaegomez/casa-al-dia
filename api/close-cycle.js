@@ -27,7 +27,7 @@ async function closeCycle(db,uid,cycleKey,today=C.today()){
    const legacy=cfg.legacyParticipantIds||C.participants(data.members);
    const rows=expenseRows(data.movements,data.bills,data.billPayments,legacy,data.billReceipts).filter(r=>C.cycle(r.date,cfg.cycleStartDay||1)===cycleKey);
    if(data.billReceipts.some(r=>!r.voided&&C.cycle(r.dueDate,cfg.cycleStartDay||1)===cycleKey&&C.receiptProgress(r,data.billPayments).pending>0)){const e=Error('Hay recibos con aportaciones pendientes en este ciclo; completa o concilia sus pagos antes de cerrar');e.status=409;throw e;}
-   const settlements=data.settlements.filter(s=>!s.voided&&C.cycle(s.allocationDate||legacyDate(s,cfg),cfg.cycleStartDay||1)===cycleKey);
+   const settlements=data.settlements.filter(s=>!s.voided&&C.cycle(s.allocationDate||s.date||legacyDate(s,cfg),cfg.cycleStartDay||1)===cycleKey);
    const balance=C.balances(rows,data.members,settlements);
    if(balance.unassigned){const e=Error('Hay gastos sin asignar. Corrige sus pagadores o beneficiarios antes de cerrar.');e.status=409;throw e;}
    const byCat={};let total=0;for(const r of rows){const n=C.cents(r.amount);byCat[r.category]=(byCat[r.category]||0)+n;total+=n;}
@@ -38,3 +38,4 @@ async function closeCycle(db,uid,cycleKey,today=C.today()){
   });
 }
 module.exports=handler;module.exports.closeCycle=closeCycle;module.exports.expenseRows=expenseRows;
+

@@ -135,3 +135,34 @@ test('API de préstamos con Firestore real confirma, registra abono una vez y no
  const result=await require('firebase/firestore').getDocs(require('firebase/firestore').query(require('firebase/firestore').collection(dbFor('peer'),'privateLoans'),require('firebase/firestore').where('participantUids','array-contains','peer')));assert.equal(result.size,2);
  }finally{await app.delete();}
 });
+
+test('ajuste acordado no permite anulación unilateral ni expone el préstamo a otro integrante',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>{
+  const db=ctx.firestore();await setDoc(doc(db,'settlements/adjustment-test'),{fromId:'a',toId:'b',fromName:'A',toName:'B',amount:10,date:'2026-10-19',kind:'agreed-adjustment',updatedBy:'admin'});
+  await setDoc(doc(db,'privateLoans/secret'),{participantUids:['admin','other'],title:'Privado',amountCents:50000});
+ });
+ for(const uid of ['user','admin']){
+  const db=dbFor(uid);await assertSucceeds(getDoc(doc(db,'settlements/adjustment-test')));
+  const batch=writeBatch(db);batch.update(doc(db,'settings/config'),{revision:1,updatedBy:uid});batch.update(doc(db,'settlements/adjustment-test'),{voided:true,updatedBy:uid});await assertFails(batch.commit());
+ }
+ await assertFails(getDoc(doc(dbFor('user'),'privateLoans/secret')));
+});
+test('compensación completa en Firestore: dos usuarios aceptan y se actualizan ambos saldos una vez',async()=>{
+ const assert=require('node:assert/strict'),{initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore');
+ const app=initializeApp({projectId:'demo-casa-al-dia'},'offset-test'),db=getFirestore(app);
+ try{
+  await db.doc('access/user').set({enabled:true,memberId:'a',role:'member'});await db.doc('access/other').set({enabled:true,memberId:'b',role:'member'});
+  await db.doc('members/a').set({name:'Persona A'});await db.doc('members/b').set({name:'Persona B'});
+  await db.doc('movements/shared').set({type:'compra',total:20,memberId:'b',date:'2026-10-19',participantIds:['a','b']});
+  const {operate,outstanding}=require('../server/loans');
+  await operate(db,'user',{action:'create',loanId:'private-fixture',operationId:'create-fixture',otherMemberId:'b',direction:'lend',amount:500,title:'Concepto privado'});
+  await operate(db,'other',{action:'accept',loanId:'private-fixture',operationId:'accept-fixture',expectedVersion:1});
+  await operate(db,'user',{action:'propose-offset',loanId:'private-fixture',operationId:'proposal-fixture',expectedVersion:2,amount:10});
+  assert.equal((await db.collection('settlements').get()).size,0);
+  const acceptance={action:'confirm-offset',loanId:'private-fixture',operationId:'offset-fixture',paymentId:'proposal-fixture',expectedVersion:3};
+  await operate(db,'other',acceptance);await operate(db,'other',acceptance);
+  assert.equal(outstanding((await db.doc('privateLoans/private-fixture').get()).data()),49000);
+  const adjustments=await db.collection('settlements').get();assert.equal(adjustments.size,1);assert.equal(adjustments.docs[0].data().amount,10);
+  assert.equal(adjustments.docs[0].data().kind,'agreed-adjustment');assert.equal((await db.doc('settings/config').get()).data().revision,1);
+ }finally{await app.delete();}
+});
