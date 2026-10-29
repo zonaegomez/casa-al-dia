@@ -357,6 +357,10 @@
   .home-ticket-detail{padding:0 20px 15px;min-width:0;}
   .home-ticket-detail summary{cursor:pointer;color:var(--accent);font-size:12px;width:fit-content;padding:8px 0;}
   .home-ticket-detail .list-item{padding-left:0;padding-right:0;}
+  .settlement-alternative>summary{list-style:none;gap:12px;}
+  .settlement-alternative>summary::-webkit-details-marker{display:none;}
+  .settlement-alternative>summary .panel-title{min-width:0;overflow-wrap:anywhere;}
+  .settlement-alternative[open]>summary>svg{transform:rotate(180deg);}
   .home-recent-main{min-width:0;flex:1;}
   .home-recent-main strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere;}
   .home-recent-main small{display:block;font-size:11px;color:var(--ink-soft);margin-top:3px;}
@@ -1745,14 +1749,14 @@ function saldosBody(activeCycle, gran){
     </div>
     ${b.unassigned>0 ? `<div class="page-sub" style="margin-top:8px;">${fmtMoney(b.unassigned)} en gastos necesitan corregir pagadores o beneficiarios (quedan fuera del cálculo).</div>` : ''}
     <div class="panel" style="margin-top:14px;">
-      <div class="panel-header"><div class="panel-title">${icon('users')} Quién le debe a quién</div></div>
-      <div class="panel-body"><p class="page-sub">Deudas por dinero adelantado y transferencias registradas. Se compensan los gastos entre las mismas dos personas. Esta vista y la propuesta de abajo representan las mismas cuentas: no se suman.</p>
+      <div class="panel-header"><div class="panel-title">${icon('users')} Deudas entre personas</div></div>
+      <div class="panel-body"><p class="page-sub">Muestra quién le debe a quién por los gastos compartidos, descontando los pagos registrados. Si dos personas se deben entre sí, aparece solo la diferencia. Los préstamos privados se consultan por separado.</p>
       ${b.directTransfers.map(t=>`<div class="list-item"><div class="list-main"><div class="list-title">${esc(t.from)} le debe a ${esc(t.to)}</div></div><div class="list-end"><strong>${fmtMoney(t.amount)}</strong> <button class="btn btn-sm" onclick="App.markTransferPaid('${activeCycle}','${gran}','${t.fromId}','${jsStr(t.from)}','${t.toId}','${jsStr(t.to)}',${t.amount})">Registrar pago</button></div></div>`).join('')||emptyBlock('check','Sin deudas directas pendientes.')}
       </div>
     </div>
-    <div class="panel" style="margin-top:14px;">
-      <div class="panel-header"><div class="panel-title">${icon('wallet')} Saldar con menos transferencias</div></div>
-      <p class="page-sub" style="padding:0 18px;">Propuesta opcional que compensa saldos entre toda la casa. Registra únicamente la transferencia que realmente hicieron.</p>
+    <details class="panel settlement-alternative" style="margin-top:14px;">
+      <summary class="panel-header" style="cursor:pointer;"><span class="panel-title">${icon('wallet')} Ver alternativa para pagar con menos transferencias</span>${icon('chevDown')}</summary>
+      <p class="page-sub" style="padding:0 18px;">Otra forma de pagar las mismas deudas: reorganiza quién le transfiere a quién para hacer menos pagos. Úsenla si todos están de acuerdo; no se suma a la lista de arriba. Registren solo el dinero que realmente transfieran.</p>
       <div class="panel-body pad0">
         ${b.transfers.length ? b.transfers.map(t=>`<div class="list-item">
           <div class="list-icon">${icon('wallet')}</div>
@@ -1763,7 +1767,7 @@ function saldosBody(activeCycle, gran){
           </div>
         </div>`).join('') : emptyBlock('check','Sin transferencias calculadas. Revisa también los gastos sin asignar.')}
       </div>
-    </div>
+    </details>
     ${b.settlements.length ? `<div class="panel" style="margin-top:14px;">
       <div class="panel-header"><div class="panel-title">${icon('check')} Movimientos registrados de la casa</div></div>
       <div class="panel-body pad0">
