@@ -1653,7 +1653,14 @@ function saldosBody(activeCycle, gran){
     </div>
     ${b.unassigned>0 ? `<div class="page-sub" style="margin-top:8px;">${fmtMoney(b.unassigned)} en gastos necesitan corregir pagadores o beneficiarios (quedan fuera del cálculo).</div>` : ''}
     <div class="panel" style="margin-top:14px;">
-      <div class="panel-header"><div class="panel-title">${icon('wallet')} Para saldar cuentas</div></div>
+      <div class="panel-header"><div class="panel-title">${icon('users')} Quién le debe a quién</div></div>
+      <div class="panel-body"><p class="page-sub">Deudas por dinero adelantado y transferencias registradas. Se compensan los gastos entre las mismas dos personas. Esta vista y la propuesta de abajo representan las mismas cuentas: no se suman.</p>
+      ${b.directTransfers.map(t=>`<div class="list-item"><div class="list-main"><div class="list-title">${esc(t.from)} le debe a ${esc(t.to)}</div></div><div class="list-end"><strong>${fmtMoney(t.amount)}</strong> <button class="btn btn-sm" onclick="App.markTransferPaid('${activeCycle}','${gran}','${t.fromId}','${jsStr(t.from)}','${t.toId}','${jsStr(t.to)}',${t.amount})">Registrar pago</button></div></div>`).join('')||emptyBlock('check','Sin deudas directas pendientes.')}
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px;">
+      <div class="panel-header"><div class="panel-title">${icon('wallet')} Saldar con menos transferencias</div></div>
+      <p class="page-sub" style="padding:0 18px;">Propuesta opcional que compensa saldos entre toda la casa. Registra únicamente la transferencia que realmente hicieron.</p>
       <div class="panel-body pad0">
         ${b.transfers.length ? b.transfers.map(t=>`<div class="list-item">
           <div class="list-icon">${icon('wallet')}</div>

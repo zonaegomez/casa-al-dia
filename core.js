@@ -35,6 +35,12 @@
   function balances(rows, members, settlements){
     const map=new Map(members.map(m=>[m.id,{member:m,paid:0,owed:0}]));
     let total=0, unassigned=0;
+    const pairs=new Map();
+    function addPair(from,to,n){
+      if(!n||from===to)return;
+      const ids=[from,to].sort(),key=JSON.stringify(ids);
+      const pair=pairs.get(key)||{ids,n:0};pair.n+=from===ids[0]?n:-n;pairs.set(key,pair);
+    }
     for(const row of rows){
       if(row.debtFronted)continue;
       const amount=cents(row.amount);
@@ -44,20 +50,31 @@
       total+=amount;
       const shares=row.beneficiaryShares?row.beneficiaryShares.map(s=>({memberId:s.memberId,cents:cents(s.amount)})):allocate(row.amount,ids);
       if(shares.reduce((s,p)=>s+p.cents,0)!==amount||shares.length!==ids.length||new Set(shares.map(s=>s.memberId)).size!==ids.length||shares.some(s=>!ids.includes(s.memberId))){total-=amount;unassigned+=amount;continue;}
+      // First apply each payer's own share. Only money fronted for others creates a debt.
+      const remaining=new Map(shares.map(s=>[s.memberId,s.cents]));
+      const funding=new Map();payers.forEach(p=>funding.set(p.memberId,(funding.get(p.memberId)||0)+cents(p.amount)));
+      for(const [id,n] of funding){const own=Math.min(n,remaining.get(id)||0);funding.set(id,n-own);remaining.set(id,(remaining.get(id)||0)-own);}
+      for(const [payer,n] of [...funding].sort(([a],[b])=>a.localeCompare(b))){
+        if(!n)continue;
+        const recipients=[...remaining].sort(([a],[b])=>a.localeCompare(b));
+        const parts=proportional(n,recipients.map(([,v])=>v));
+        recipients.forEach(([id,v],i)=>{addPair(id,payer,parts[i]);remaining.set(id,v-parts[i]);});
+      }
       shares.forEach(s=>map.get(s.memberId).owed+=s.cents);
       payers.forEach(p=>map.get(p.memberId).paid+=cents(p.amount));
     }
     const adjustments=new Map();
     for(const s of settlements){
-      if(!map.has(s.fromId)||!map.has(s.toId)||s.fromId===s.toId) continue;
-      const n=cents(s.amount);adjustments.set(s.fromId,(adjustments.get(s.fromId)||0)+n);adjustments.set(s.toId,(adjustments.get(s.toId)||0)-n);
+      if(s.voided||s.archived||!map.has(s.fromId)||!map.has(s.toId)||s.fromId===s.toId) continue;
+      const n=cents(s.amount);addPair(s.fromId,s.toId,-n);adjustments.set(s.fromId,(adjustments.get(s.fromId)||0)+n);adjustments.set(s.toId,(adjustments.get(s.toId)||0)-n);
     }
     const result=[...map.values()].map(x=>({member:x.member,paid:x.paid/100,fairShare:x.owed/100,balance:(x.paid-x.owed+(adjustments.get(x.member.id)||0))/100}));
     const creditors=result.filter(x=>x.balance>0).map(x=>({id:x.member.id,name:x.member.name,amt:Math.round(x.balance*100)}));
     const debtors=result.filter(x=>x.balance<0).map(x=>({id:x.member.id,name:x.member.name,amt:-Math.round(x.balance*100)}));
     const transfers=[];let c=0,d=0;
     while(c<creditors.length&&d<debtors.length){const cr=creditors[c],de=debtors[d],n=Math.min(cr.amt,de.amt);transfers.push({fromId:de.id,from:de.name,toId:cr.id,to:cr.name,amount:n/100});cr.amt-=n;de.amt-=n;if(!cr.amt)c++;if(!de.amt)d++;}
-    return {total:total/100,unassigned:unassigned/100,fairShare:0,balances:result,transfers,settlements};
+    const directTransfers=[...pairs.values()].filter(p=>p.n).map(p=>{const [fromId,toId]=p.n>0?p.ids:[...p.ids].reverse();return {fromId,from:map.get(fromId).member.name,toId,to:map.get(toId).member.name,amount:Math.abs(p.n)/100};});
+    return {directTransfers,total:total/100,unassigned:unassigned/100,fairShare:0,balances:result,transfers,settlements};
   }
   function billShares(bill,amount,ids){
     if(bill.splitPolicy!=='fixed')return allocate(amount,ids).map(p=>({memberId:p.memberId,amount:p.cents/100}));

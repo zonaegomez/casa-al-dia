@@ -9,7 +9,8 @@ async function settle(db,uid,input){
   const data={};for(const name of ['members','movements','bills','billPayments','billReceipts','settlements']){const snap=await tx.get(db.collection(name));data[name]=snap.docs.map(d=>({id:d.id,...d.data()}));}
   const legacy=config.legacyParticipantIds||C.participants(data.members),rows=expenseRows(data.movements,data.bills,data.billPayments,legacy,data.billReceipts);
   const balance=C.balances(rows,data.members,data.settlements.filter(s=>!s.voided)),from=balance.balances.find(b=>b.member.id===fromId),to=balance.balances.find(b=>b.member.id===toId);
-  if(!from||!to||C.cents(amount)>Math.round(-from.balance*100)||C.cents(amount)>Math.round(to.balance*100)){const e=Error('El importe ya no corresponde al saldo pendiente de estas personas. Actualiza la vista.');e.status=409;throw e;}
+  const direct=balance.directTransfers.find(t=>t.fromId===fromId&&t.toId===toId),netLimit=Math.max(0,Math.min(Math.round(-(from?.balance||0)*100),Math.round((to?.balance||0)*100))),limit=Math.max(netLimit,C.cents(direct?.amount||0));
+  if(!from||!to||from.member.active===false||to.member.active===false||C.cents(amount)>limit){const e=Error('El importe ya no corresponde al saldo pendiente de estas personas. Actualiza la vista.');e.status=409;throw e;}
   const closed=await tx.get(db.doc('closedCycles/'+C.cycle(date,config.cycleStartDay||1)));
   if(closed.exists){const e=Error('El ciclo de la transferencia está cerrado; revisa la fecha antes de registrar.');e.status=409;throw e;}
   const result={fromId,toId,fromName:from.member.name,toName:to.member.name,amount,date,allocationDate:date,updatedBy:uid};

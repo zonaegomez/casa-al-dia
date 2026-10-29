@@ -30,3 +30,16 @@ test('UI opens editable amount/date and sends actual values without making a sec
  const operationId=api.state.pendingTransfer.operationId;await App.confirmTransferPayment();
  assert.equal(payload.amount,49.33);assert.equal(payload.date,'2020-02-15');assert.equal(payload.operationId,operationId);assert.equal(api.state.pendingTransfer,null);
 });
+test('direct payment reaches a net debtor and cannot exceed pair debt',async()=>{
+ const extra={'movements/internet':{type:'compra',total:30,memberId:'b',date:'2020-02-01',participantIds:['a','b','c']}};
+ const r=await settle(setup(extra),'actor',input({toId:'b',amount:10}));assert.equal(r.toId,'b');
+ await assert.rejects(settle(setup(extra),'actor',input({toId:'b',amount:10.01})),/saldo pendiente/);
+});
+test('direct debts reconcile with net balances and actual transfers',()=>{
+ const members=['a','b','c'].map(id=>({id,name:id}));
+ const rows=[{amount:150,memberId:'c',participantIds:['a','b','c']},{amount:30,memberId:'b',participantIds:['a','b','c']}];
+ let b=C.balances(rows,members,[]);assert.equal(b.directTransfers.find(t=>t.fromId==='a'&&t.toId==='b').amount,10);assert.equal(b.balances.find(x=>x.member.id==='b').balance,-30);
+ b=C.balances(rows,members,[{fromId:'a',toId:'b',amount:10}]);assert.equal(b.directTransfers.some(t=>t.fromId==='a'&&t.toId==='b'),false);
+ for(const row of b.balances){const net=b.directTransfers.reduce((n,t)=>n+(t.toId===row.member.id?t.amount:0)-(t.fromId===row.member.id?t.amount:0),0);assert.equal(Math.round(net*100),Math.round(row.balance*100));}
+ const rent={amount:150,participantIds:['a','b','c'],beneficiaryShares:[{memberId:'a',amount:40},{memberId:'b',amount:50},{memberId:'c',amount:60}],payers:[{memberId:'a',amount:40},{memberId:'b',amount:50},{memberId:'c',amount:60}]};assert.equal(C.balances([rent],members,[]).directTransfers.length,0);
+});
