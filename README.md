@@ -73,3 +73,7 @@ El respaldo completo de Firestore se prepara con `scripts/backup.js`; incluye pl
 ## Invitaciones y perfiles
 
 El administrador puede generar invitaciones vinculadas a un correo y compartir su enlace. Cada persona verifica su correo, elige su contraseña y edita únicamente su perfil y foto. Ver [uso y permisos](docs/INVITACIONES-Y-PERFILES.md).
+
+## Notificaciones e instalación
+
+Casa al Día admite instalación como PWA y notificaciones voluntarias por dispositivo, con recordatorios diarios y privacidad entre cuentas. Ver [activación, horario y configuración](docs/NOTIFICACIONES.md).
