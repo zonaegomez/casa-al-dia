@@ -46,7 +46,15 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   const pastRow=page.locator('tr').filter({hasText:'2000'});assert.equal(await pastRow.getByRole('button',{name:'Cerrar',exact:true}).count(),1);
   const currentRow=page.locator('tr').filter({hasText:'En curso'});assert.equal(await currentRow.getByRole('button',{name:'Cerrar',exact:true}).count(),0);
   await page.evaluate(()=>{window.__qa.state.movements=window.__cycleRowsQA;delete window.__cycleRowsQA;});
-  await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});await page.getByText('Resumen acumulado por integrante:',{exact:false}).waitFor();await page.getByText('Deudas entre personas',{exact:true}).waitFor();assert.equal(await page.locator('.settlement-alternative').count(),0);
+  await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});await page.getByText('Resumen acumulado por integrante:',{exact:false}).waitFor();await page.getByText('Deudas entre personas',{exact:true}).waitFor();
+  const aligned=await page.evaluate(()=>[...document.querySelectorAll('th.num')].every(th=>getComputedStyle(th).textAlign==='right'));assert.ok(aligned);
+  await page.evaluate(()=>{window.__qa.financeIdentity('a','member');App.go('config');});
+  assert.equal(await page.getByTitle('Editar mi perfil').count(),1);
+  assert.equal(await page.getByRole('button',{name:'Agregar',exact:true}).count(),0);
+  const denied=await page.evaluate(()=>{try{App.openMemberForm('b');return false;}catch(e){return e.message.includes('propio perfil');}});assert.ok(denied);
+  await page.getByTitle('Editar mi perfil').click();await page.locator('#mName').waitFor();await page.evaluate(()=>App.closeModal());
+  await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});
+assert.equal(await page.locator('.settlement-alternative').count(),0);
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(()=>App.go('dashboard'));
   assert.ok(await page.evaluate(()=>{const el=document.querySelector('.home-board');return el.scrollWidth<=el.clientWidth+1;}));

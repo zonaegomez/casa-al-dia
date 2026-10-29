@@ -237,6 +237,9 @@
   tbody tr{transition:background .12s ease;}
   tbody tr:hover{background:var(--surface-2);}
   .table-scroll{overflow-x:auto;}
+  .table-scroll th.num{ text-align:right; }
+  .table-scroll td.num{font-variant-numeric:tabular-nums;}
+  .table-scroll td.num .btn{font-family:'DM Sans',system-ui,-apple-system,sans-serif;}
   .row-title{font-weight:700;}
   .row-sub{color:var(--ink-faint); font-size:11.5px;}
   .num{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap;}
@@ -1734,7 +1737,7 @@ function saldosBody(activeCycle, gran){
     <div class="panel">
       <div class="panel-body pad0">
         <div class="table-scroll"><table>
-          <thead><tr><th>Integrante</th><th>Pagó</th><th>Le tocaba</th><th>Saldo</th></tr></thead>
+          <thead><tr><th>Integrante</th><th class="num">Pagó</th><th class="num">Le tocaba</th><th class="num">Saldo</th></tr></thead>
           <tbody>${b.balances.map(row=>{
             const good = row.balance >= 0;
             return `<tr>
@@ -2123,15 +2126,16 @@ function pageConfig(){
     <div class="grid-2">
       <div class="panel">
         <div class="panel-header"><div class="panel-title">${icon('users')} Miembros de la casa</div>
-          <button class="btn btn-sm btn-primary" onclick="App.openMemberForm(null)">${icon('plus')} Agregar</button>
+          ${accountRole==='admin'?`<button class="btn btn-sm btn-primary" onclick="App.openMemberForm(null)">${icon('plus')} Agregar</button>`:''}
         </div>
         <div class="panel-body pad0">
+          <p class="page-sub" style="padding:0 18px;">Cada integrante edita su propio nombre y color. Solo el administrador puede agregar, desactivar o reactivar integrantes; el historial se conserva.</p>
           ${state.members.length? state.members.map(m=>`<div class="list-item">
             <span class="avatar" style="background:${m.color}">${initials(m.name)}</span>
             <div class="list-main"><div class="list-title">${esc(m.name)}${m.active===false?" (inactivo)":""}</div></div>
             <div class="list-end">
-              <button class="btn btn-sm btn-ghost" onclick="App.openMemberForm('${m.id}')">${icon('edit')}</button>
-              ${m.active===false?`<button class="btn btn-sm" onclick="App.reactivateMember('${m.id}')">Reactivar</button>`:`<button class="btn btn-sm btn-ghost" onclick="App.confirmDeleteMember('${m.id}')">${icon('trash')}</button>`}
+              ${m.id===accountMemberId?`<button class="btn btn-sm btn-ghost" title="Editar mi perfil" onclick="App.openMemberForm('${m.id}')">${icon('edit')} Mi perfil</button>`:'<span class="row-sub">Perfil personal</span>'}
+              ${accountRole==='admin'?(m.active===false?`<button class="btn btn-sm" onclick="App.reactivateMember('${m.id}')">Reactivar</button>`:`<button class="btn btn-sm btn-ghost" title="Desactivar integrante" onclick="App.confirmDeleteMember('${m.id}')">Desactivar</button>`):''}
             </div>
           </div>`).join('') : emptyBlock('users', 'Agrega a quienes viven en casa para saber quién registró cada gasto.')}
         </div>
@@ -2216,7 +2220,11 @@ function modalChangePassword(){
  <div class="modal-foot"><button type="button" class="btn" onclick="App.openAccount()">Volver</button><button id="passwordSave" type="submit" class="btn btn-primary">Guardar contraseña</button></div></form>`);
 }
 
+function assertMemberProfileAccess(id){
+  if(id ? id!==accountMemberId : accountRole!=='admin')throw Error(id?'Solo puedes editar tu propio perfil.':'Solo el administrador agrega integrantes.');
+}
 function modalMemberForm(id){
+  assertMemberProfileAccess(id);
   const m = id ? state.members.find(x=>x.id===id) : null;
   openModal(`
     <div class="modal-header"><h3>${m?'Editar miembro':'Nuevo miembro'}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
@@ -2225,7 +2233,7 @@ function modalMemberForm(id){
       <div class="field"><label>Color</label><div class="swatches">${MEMBER_COLORS.map(c=>`<div class="swatch ${(m?m.color:MEMBER_COLORS[0])===c?'sel':''}" style="background:${c}" data-color="${c}" onclick="App.pickColor(this)"></div>`).join('')}</div></div>
     </div>
     <div class="modal-foot">
-      ${m?`<button class="btn btn-danger" onclick="App.confirmDeleteMember('${m.id}')">Eliminar</button>`:''}
+      ${m&&accountRole==='admin'?`<button class="btn btn-danger" onclick="App.confirmDeleteMember('${m.id}')">Desactivar</button>`:''}
       <button class="btn btn-primary" onclick="App.saveMember('${id||''}')">Guardar</button>
     </div>
   `);
@@ -2683,6 +2691,7 @@ window.App = {
   openMemberForm(id){ modalMemberForm(id); },
   pickColor(el){ document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('sel')); el.classList.add('sel'); },
   async saveMember(id){
+    assertMemberProfileAccess(id);
     const name = document.getElementById('mName').value.trim();
     if(!name){ toast('Ponle un nombre'); return; }
     const colorEl = document.querySelector('.swatch.sel');
@@ -3314,8 +3323,9 @@ Object.assign(App,{
  async signOut(){await firebase.auth().signOut();},
  exportLocalBackup(){const backup=loadLocal();if(!backup){toast('No hay respaldo en este dispositivo');return;}downloadFile('respaldo-anterior-casa.json',JSON.stringify(backup,null,2));},
  async confirmDeleteReminder(id){if(confirm('¿Eliminar este recordatorio?')){await Data.del('reminders',id);closeModal();toast('Recordatorio eliminado');}},
- async reactivateMember(id){await Data.set('members',id,{active:true},true);toast('Integrante reactivado');},
+ async reactivateMember(id){if(accountRole!=='admin')throw Error('Solo el administrador reactiva integrantes');await Data.set('members',id,{active:true},true);toast('Integrante reactivado');},
  async confirmDeleteMember(id){
+  if(accountRole!=='admin')throw Error('Solo el administrador desactiva integrantes');
   if(!confirm('¿Desactivar este integrante? Su historial se conserva.'))return;
   await Data.set('members',id,{active:false},true);
   closeModal();toast('Integrante desactivado');

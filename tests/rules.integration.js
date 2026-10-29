@@ -5,7 +5,7 @@ let env;
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-casa-al-dia',firestore:{host:'127.0.0.1',port:8088,rules:fs.readFileSync('firestore.rules','utf8')}});});
 after(async()=>{if(env)await env.cleanup();});
 beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async ctx=>{
- const db=ctx.firestore();await setDoc(doc(db,'access/user'),{enabled:true,role:'member'});await setDoc(doc(db,'access/admin'),{enabled:true,role:'admin'});
+ const db=ctx.firestore();await setDoc(doc(db,'access/user'),{enabled:true,role:'member',memberId:'a'});await setDoc(doc(db,'access/admin'),{enabled:true,role:'admin'});
  await setDoc(doc(db,'settings/config'),{cycleStartDay:15,currency:'MXN',revision:0,legacyParticipantIds:['a','b']});await setDoc(doc(db,'closedCycles/2026-09'),{total:100});
  await setDoc(doc(db,'bills/luz'),{name:'Luz',history:[{paidAt:'2026-09-20',amount:100}],nextDueDate:'2026-10-20',amountEstimate:100});
 });});
@@ -26,7 +26,7 @@ test('la capa de escritura real funciona con las reglas: compra, pago y desactiv
  let n=0;const store=create({state:{members:[{id:'a'},{id:'b'}]},core:C,db:()=>db,actor:()=>'user',ready:()=>true,newId:()=>`real-${++n}`});
  await assertSucceeds(store.atomic({opId:'real-purchase'},async t=>{await t.put('items','rice',{name:'Arroz',currentQty:2,minQty:0},false);await t.put('movements','m1',{type:'compra',itemId:'rice',qty:2,total:10,unitCost:5,date:'2026-10-19',memberId:'a',participantIds:['a','b']},false);}));
  await assertSucceeds(store.atomic({opId:'real-payment'},async t=>{await t.put('billPayments','p1',{billId:'luz',paidAt:'2026-10-19',amount:100,memberId:'a',participantIds:['a','b']},false);await t.put('bills','luz',{nextDueDate:'2026-11-20'});}));
- await assertSucceeds(store.set('members','a',{name:'A',active:false},false));
+ await assertFails(store.set('members','a',{name:'A',active:false},false));
 });
 test('protege creación, cambio de fecha y anulación de pago cerrado',async()=>{
  const db=dbFor();await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'billPayments/closed'),{billId:'luz',amount:100,paidAt:'2026-09-20',participantIds:['a','b'],updatedBy:'user'}));
@@ -165,4 +165,16 @@ test('compensación completa en Firestore: dos usuarios aceptan y se actualizan 
   const adjustments=await db.collection('settlements').get();assert.equal(adjustments.size,1);assert.equal(adjustments.docs[0].data().amount,10);
   assert.equal(adjustments.docs[0].data().kind,'agreed-adjustment');assert.equal((await db.doc('settings/config').get()).data().revision,1);
  }finally{await app.delete();}
+});
+
+test('cada integrante modifica solo su perfil; el administrador gestiona altas y estado',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>{const db=ctx.firestore();await setDoc(doc(db,'members/a'),{name:'A',color:'#6258E8',active:true});await setDoc(doc(db,'members/b'),{name:'B',color:'#16856B',active:true});});
+ function update(uid,id,data){const db=dbFor(uid),b=writeBatch(db);b.update(doc(db,'settings/config'),{revision:1,updatedBy:uid});b.update(doc(db,'members/'+id),{...data,updatedBy:uid});return b.commit();}
+ await assertFails(update('user','b',{name:'Otro nombre'}));
+ await assertFails(update('admin','b',{name:'Otro nombre'}));
+ await assertFails(update('user','a',{active:false}));
+ await assertFails(update('user','a',{role:'admin'}));
+ await assertSucceeds(update('user','a',{name:'Mi nombre',color:'#16856B'}));
+ await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'settings/config'),{revision:0},{merge:true}));
+ await assertSucceeds(update('admin','b',{active:false}));
 });
