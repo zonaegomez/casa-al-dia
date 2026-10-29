@@ -12,4 +12,7 @@ console.log('Sitio preparado en public/');
 
 
 
-fs.mkdirSync('public/icons',{recursive:true});for(const size of [180,192,512])fs.writeFileSync('public/icons/icon-'+size+'.png',require('./pwa-icons')(size));
+fs.mkdirSync('public/icons',{recursive:true});for(const size of [16,32,180,192,512])fs.writeFileSync('public/icons/icon-'+size+'.png',require('./pwa-icons')(size));
+
+// ICO embeds the same 32px PNG used by browser tabs.
+const favicon=require('./pwa-icons')(32),ico=Buffer.alloc(22);ico.writeUInt16LE(1,2);ico.writeUInt16LE(1,4);ico[6]=32;ico[7]=32;ico.writeUInt16LE(1,10);ico.writeUInt16LE(32,12);ico.writeUInt32LE(favicon.length,14);ico.writeUInt32LE(22,18);fs.writeFileSync('public/favicon.ico',Buffer.concat([ico,favicon]));
