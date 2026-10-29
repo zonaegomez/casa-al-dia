@@ -353,6 +353,10 @@
   .home-stock-status{display:flex;gap:8px;align-items:center;margin:0 0 12px;}
   .home-recent-row{display:flex;align-items:center;gap:12px;padding:15px 20px;}
   .home-recent-row+.home-recent-row{border-top:1px solid var(--border);}
+  .home-recent-ticket+.home-recent-ticket,.home-recent-ticket+.home-recent-row,.home-recent-row+.home-recent-ticket{border-top:1px solid var(--border);}
+  .home-ticket-detail{padding:0 20px 15px;min-width:0;}
+  .home-ticket-detail summary{cursor:pointer;color:var(--accent);font-size:12px;width:fit-content;padding:8px 0;}
+  .home-ticket-detail .list-item{padding-left:0;padding-right:0;}
   .home-recent-main{min-width:0;flex:1;}
   .home-recent-main strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere;}
   .home-recent-main small{display:block;font-size:11px;color:var(--ink-soft);margin-top:3px;}
@@ -1123,8 +1127,18 @@ function pageDashboard(){
     </aside></div></div>`;
 }
 function renderHomeRecent(){
- const rows=allExpenseRows().slice(0,4);if(!rows.length)return emptyBlock('cash','Tus compras y pagos aparecerán aquí.');
- return rows.map(r=>`<div class="home-recent-row"><div class="list-icon">${icon(CATS[r.category]?.icon||'cash')}</div><div class="home-recent-main"><strong>${esc(r.name)}</strong><small>${fmtDate(r.date)} · ${esc(r.memberName||'Sin asignar')}</small></div><span class="mono">${fmtMoney(r.amount)}</span></div>`).join('');
+ // Agrupar antes de limitar evita mostrar tickets incompletos o repetir sus productos.
+ const rows=groupGastoRows(allExpenseRows()).slice(0,4);
+ if(!rows.length)return emptyBlock('cash','Tus compras y pagos aparecerán aquí.');
+ return rows.map(entry=>{
+   if(entry.type!=='group'){
+     const r=entry.row;
+     return `<div class="home-recent-row"><div class="list-icon">${icon(CATS[r.category]?.icon||'cash')}</div><div class="home-recent-main"><strong>${esc(r.name)}</strong><small>${fmtDate(r.date)} · ${esc(r.memberName||'Sin asignar')}</small></div><span class="mono">${fmtMoney(r.amount)}</span></div>`;
+   }
+   const count=new Set(entry.lines.map(l=>l.ref)).size;
+   const shares=gastoGroupShares(entry);
+   return `<div class="home-recent-ticket"><div class="home-recent-row"><div class="list-icon">${icon('cart')}</div><div class="home-recent-main"><strong>${esc(entry.concept)}</strong><small>${fmtDate(entry.date)} · ${count} producto(s)${gastoGroupMemberNote(entry.lines)}</small></div><span class="mono">${fmtMoney(entry.amount)}</span></div><details class="home-ticket-detail"><summary>Ver detalle</summary><p class="page-sub">Estos productos ya están incluidos en el total del ticket.</p>${shares.length?`<p class="page-sub">Le toca a cada quien: ${shares.map(p=>esc(p.member.name)+' '+fmtMoney(p.cents/100)).join(' · ')}</p>`:''}${entry.lines.map(gastosRowHtml).join('')}</details></div>`;
+ }).join('');
 }
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
