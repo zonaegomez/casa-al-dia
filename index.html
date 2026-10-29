@@ -1730,7 +1730,7 @@ function saldosBody(activeCycle, gran){
   const hasMembers = state.members.length>=2;
   if(!hasMembers) return `<div class="panel"><div class="panel-body">${emptyBlock('users','Agrega al menos dos miembros de la casa en Ajustes para poder calcular un saldo entre integrantes.')}</div></div>`;
   return `
-    <p class="page-sub">Saldo acumulado de toda la casa. Cambiar entre mes y quincena solo filtra los gastos; las transferencias se cuentan una sola vez. Las deudas internas se administran por separado.</p>
+    <p class="page-sub">Resumen acumulado por integrante: “Por cobrar” y “Por pagar” muestran la diferencia entre lo que cada persona debe recibir y pagar. Para saber a quién pagarle, consulta “Deudas entre personas”. Cambiar entre mes y quincena solo filtra los gastos. Las deudas de compras y los préstamos privados se administran por separado.</p>
     <div class="panel">
       <div class="panel-body pad0">
         <div class="table-scroll"><table>
@@ -1741,7 +1741,7 @@ function saldosBody(activeCycle, gran){
               <td><div style="display:flex; align-items:center; gap:8px;"><span class="avatar" style="background:${row.member.color||'#3E6DF6'}; width:26px; height:26px; font-size:11px;">${initials(row.member.name)}</span>${esc(row.member.name)}</div></td>
               <td class="num">${fmtMoney(row.paid)}</td>
               <td class="num row-sub">${fmtMoney(row.fairShare)}</td>
-              <td class="num" style="font-weight:700; color:${good?'var(--good)':'var(--bad)'}">${row.balance>0?'Tienes a favor ':row.balance<0?'Te toca pagar ':'Sin pendiente '}${fmtMoney(Math.abs(row.balance))}<br><button class="btn btn-sm btn-ghost" onclick="App.explainBalance('${row.member.id}')">Ver cómo se calculó</button></td>
+              <td class="num" style="font-weight:700; color:${good?'var(--good)':'var(--bad)'}">${row.balance>0?'Por cobrar: ':row.balance<0?'Por pagar: ':'Sin pendiente '}${fmtMoney(Math.abs(row.balance))}<br><button class="btn btn-sm btn-ghost" onclick="App.explainBalance('${row.member.id}')">Ver cómo se calculó</button></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>
@@ -1750,24 +1750,10 @@ function saldosBody(activeCycle, gran){
     ${b.unassigned>0 ? `<div class="page-sub" style="margin-top:8px;">${fmtMoney(b.unassigned)} en gastos necesitan corregir pagadores o beneficiarios (quedan fuera del cálculo).</div>` : ''}
     <div class="panel" style="margin-top:14px;">
       <div class="panel-header"><div class="panel-title">${icon('users')} Deudas entre personas</div></div>
-      <div class="panel-body"><p class="page-sub">Muestra quién le debe a quién por los gastos compartidos, descontando los pagos registrados. Si dos personas se deben entre sí, aparece solo la diferencia. Los préstamos privados se consultan por separado.</p>
+      <div class="panel-body"><p class="page-sub">Aquí aparece cuánto debe pagar cada persona y a quién, descontando los pagos registrados. Si dos personas se deben entre sí, se muestra la diferencia. Registra un pago solo después de realizarlo; un abono reduce la deuda, pero no la liquida hasta completar el importe. Los préstamos privados se consultan por separado.</p>
       ${b.directTransfers.map(t=>`<div class="list-item"><div class="list-main"><div class="list-title">${esc(t.from)} le debe a ${esc(t.to)}</div></div><div class="list-end"><strong>${fmtMoney(t.amount)}</strong> <button class="btn btn-sm" onclick="App.markTransferPaid('${activeCycle}','${gran}','${t.fromId}','${jsStr(t.from)}','${t.toId}','${jsStr(t.to)}',${t.amount})">Registrar pago</button></div></div>`).join('')||emptyBlock('check','Sin deudas directas pendientes.')}
       </div>
     </div>
-    <details class="panel settlement-alternative" style="margin-top:14px;">
-      <summary class="panel-header" style="cursor:pointer;"><span class="panel-title">${icon('wallet')} Ver alternativa para pagar con menos transferencias</span>${icon('chevDown')}</summary>
-      <p class="page-sub" style="padding:0 18px;">Otra forma de pagar las mismas deudas: reorganiza quién le transfiere a quién para hacer menos pagos. Úsenla si todos están de acuerdo; no se suma a la lista de arriba. Registren solo el dinero que realmente transfieran.</p>
-      <div class="panel-body pad0">
-        ${b.transfers.length ? b.transfers.map(t=>`<div class="list-item">
-          <div class="list-icon">${icon('wallet')}</div>
-          <div class="list-main"><div class="list-title">${esc(t.from)} le transfiere a ${esc(t.to)}</div></div>
-          <div class="list-end" style="display:flex; align-items:center; gap:10px;">
-            <span style="font-weight:700;">${fmtMoney(t.amount)}</span>
-            <button class="btn btn-sm" onclick="App.markTransferPaid('${activeCycle}','${gran}','${t.fromId}','${jsStr(t.from)}','${t.toId}','${jsStr(t.to)}',${Math.round(t.amount*100)/100})">Ya se pagó</button>
-          </div>
-        </div>`).join('') : emptyBlock('check','Sin transferencias calculadas. Revisa también los gastos sin asignar.')}
-      </div>
-    </details>
     ${b.settlements.length ? `<div class="panel" style="margin-top:14px;">
       <div class="panel-header"><div class="panel-title">${icon('check')} Movimientos registrados de la casa</div></div>
       <div class="panel-body pad0">
