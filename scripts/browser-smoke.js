@@ -46,7 +46,7 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   const pastRow=page.locator('tr').filter({hasText:'2000'});assert.equal(await pastRow.getByRole('button',{name:'Cerrar',exact:true}).count(),1);
   const currentRow=page.locator('tr').filter({hasText:'En curso'});assert.equal(await currentRow.getByRole('button',{name:'Cerrar',exact:true}).count(),0);
   await page.evaluate(()=>{window.__qa.state.movements=window.__cycleRowsQA;delete window.__cycleRowsQA;});
-  await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});await page.getByText('Saldo acumulado de toda la casa.',{exact:false}).waitFor();
+  await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});await page.getByText('Resumen acumulado por integrante:',{exact:false}).waitFor();await page.getByText('Deudas entre personas',{exact:true}).waitFor();assert.equal(await page.locator('.settlement-alternative').count(),0);
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(()=>App.go('dashboard'));
   assert.ok(await page.evaluate(()=>{const el=document.querySelector('.home-board');return el.scrollWidth<=el.clientWidth+1;}));
