@@ -14,6 +14,7 @@ async function createInvitation(db,uid,input,now=Date.now()){
   await admin(tx,db,uid);
   const ref=db.doc('invitations/'+id),oldSnap=await tx.get(ref),old=oldSnap.exists?oldSnap.data():null;
   if(old?.status==='accepted')error('Ese correo ya aceptó una invitación. No se crea otro perfil.',409);
+  if(old?.status==='pending'&&requested&&requested!==old.memberId)error('Cancela la invitación pendiente antes de cambiar el perfil vinculado',409);
   const memberId=requested||old?.memberId||freshId,memberRef=db.doc('members/'+memberId),memberSnap=await tx.get(memberRef),member=memberSnap.exists?memberSnap.data():null;
   if(requested&&!member)error('Integrante no disponible',404);
   const owners=await tx.get(db.collection('access').where('memberId','==',memberId));

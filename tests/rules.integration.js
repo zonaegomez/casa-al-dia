@@ -187,7 +187,8 @@ test('invitaciones: correo verificado, vínculo único, cancelación y vencimien
   const previous=(await db.doc('movements/old').get()).data(),config=(await db.doc('settings/config').get()).data();
   await assert.rejects(I.createInvitation(db,'user',{name:'Invitada',email:'new@example.test'},now),/administrador/);
   const inv=await I.createInvitation(db,'admin',{name:'Invitada',email:' NEW@example.test '},now),pending=(await db.doc('members/'+inv.memberId).get()).data();
-  assert.equal(pending.active,false);assert.equal(pending.invitationPending,true);assert.ok(!(await I.listInvitations(db,'admin')).invitations[0].secretHash);
+  assert.equal(pending.active,false);assert.equal(pending.invitationPending,true);
+  await assert.rejects(I.createInvitation(db,'admin',{name:'Otro perfil',email:'new@example.test',memberId:'b'},now),/Cancela/);assert.ok(!(await I.listInvitations(db,'admin')).invitations[0].secretHash);
   const stored=(await db.doc('invitations/'+inv.id).get()).data();assert.ok(!JSON.stringify(stored).includes(inv.token.split('.')[1]));
   const identity={uid:'new-user',email:'new@example.test',email_verified:true,firebase:{sign_in_provider:'password'}};
   await assert.rejects(I.acceptInvitation(db,{...identity,email_verified:false},inv.token,now),/Verifica/);
