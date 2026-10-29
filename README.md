@@ -1,70 +1,71 @@
-# Casa al Día — versión web (Vercel + Firebase)
+> Actualización de modelo: consultar [REINGENIERIA.md](docs/REINGENIERIA.md). Renta por cuotas; otros gastos por participantes de cada línea; recibos y aportaciones parciales separados. Esta sección actualiza cualquier descripción anterior de pago completo o reparto siempre igualitario.
 
-Esta es la versión de "Casa al Día" pensada para vivir en tu propio dominio de Vercel,
-con una base de datos en Firebase para que todos en casa vean los mismos datos en
-tiempo real, sin depender de una cuenta de Claude.
+# Casa al Día
 
-Es un solo archivo (`index.html`) sin backend propio: todo corre en el navegador y
-se conecta directo a Firebase.
+Aplicación doméstica de inventario, compras, servicios y cuentas compartidas.
+Frontend HTML/JavaScript, Firebase Authentication/Firestore y funciones de Vercel.
 
-## 🚀 Ya está en vivo
+La rama de integridad cambia el acceso anónimo por cuentas autorizadas. **No se puede desplegar encima de la versión anterior sin preparar Authentication, las reglas y las variables de servidor.** El procedimiento está en [docs/ACTIVACION.md](docs/ACTIVACION.md).
 
-- Sitio: https://casa-al-dia-three.vercel.app
-- Código: https://github.com/zonaegomez/casa-al-dia
-- Cada vez que se sube un `index.html` nuevo al repo, Vercel vuelve a desplegar
-  automáticamente en 1–2 minutos.
+## Desarrollo
 
-## ✅ Firebase ya está configurado
+Node.js 24.15 o posterior dentro de la rama 24.x. Para las reglas: Java 21 o posterior.
 
-Ya entré a tu proyecto de Firebase (**Casa al dia**, ID `casa-al-dia-ceb5a`) y dejé
-todo listo:
+```sh
+npm ci
+npm run check
+npm test
+npm run test:rules
+npm run build
+```
 
-- Se registró la app web "Casa al Dia web" y sus valores de configuración ya están
-  pegados en `index.html` (el bloque `firebaseConfig`, con tus datos reales).
-- Se creó la base de datos de **Cloud Firestore** (edición Standard, plan gratuito
-  Spark, ubicación `nam5`).
-- Se publicaron las reglas de seguridad de `firestore.rules` (exigen sesión
-  autenticada, aunque sea anónima, para leer o escribir).
-- Se habilitó el método de acceso **Anónimo** en Authentication: cada persona que
-  abra la app recibe una sesión automática, sin pedir usuario ni contraseña.
+El build crea `public/`; solo publica los archivos necesarios del frontend. Las funciones de servidor viven en `api/`. Las credenciales de servicio nunca se copian al build.
 
-No necesitas tocar nada de Firebase. Los pasos que faltan son solo para publicar
-el sitio.
+Prueba de navegación con datos ficticios, sin conectarse a Firebase:
 
-## Cómo se hizo (referencia)
+```sh
+npx playwright install chromium --only-shell
+npm run test:browser
+```
 
-1. Se subió el código a GitHub (`zonaegomez/casa-al-dia`, rama `main`) usando
-   la función de "Upload files" de GitHub (no `git push`, porque esta sesión
-   no tenía permiso de push directo al repo).
-2. Se importó el repo en Vercel (Import Git Repository → sin framework, sin
-   build command) y se desplegó.
+## Reglas de negocio
 
-Para futuras actualizaciones del código, basta con subir un `index.html`
-nuevo a la rama `main` del repo (por la web de GitHub o con `git push` si ya
-tienes acceso) — Vercel vuelve a desplegar solo.
+- Un gasto guarda los IDs de sus beneficiarios seleccionados. Se reparte por partes iguales, conservando todos los centavos. Las aportaciones indican quién pagó; no cambian automáticamente la obligación de cada persona.
+- El saldo entre integrantes es **acumulado**, independiente del filtro mensual/quincenal de gastos. Una transferencia se cuenta una sola vez.
+- Las deudas explícitas y sus abonos son un registro separado del reparto de gastos. No registrar la misma obligación en ambos lugares.
+- Compra, inventario y líneas de ticket se confirman en una transacción con comprobante de operación. El mismo formulario reenviado conserva su ID.
+- Los miembros se desactivan; artículos, servicios y deudas se archivan. No se borran sus referencias históricas.
+- Una compra anulada revierte todo el ticket y sus deudas sin abonos, incluidas las unidades si sus movimientos las controlaron. Si se produciría inventario negativo, se rechaza la anulación para que se concilie primero.
+- Los cierres se calculan en servidor y bloquean movimientos y pagos del ciclo desde las reglas. Solo se cierran periodos terminados. Las cuentas pendientes se conservan en el saldo acumulado y pueden liquidarse después.
+- El sistema bloquea escrituras sin conexión; no promete sincronizar capturas locales aisladas. El respaldo local anterior se puede descargar.
+- Inventario exacto o sencillo por artículo. En modo sencillo se marca “hay / queda poco / comprar”; las compras no simulan un conteo exacto.
 
-## Notas
+## Mapa del código
 
-- Esta versión web es independiente de la versión que vive como Claude
-  Artifact: cada una tiene su propia base de datos, así que los datos **no**
-  se sincronizan entre ambas. Úsalas como quieras mientras decides cuál
-  prefieres para el día a día.
-- Las reglas actuales dan acceso de lectura/escritura a cualquiera que tenga
-  el enlace de la app (con una sesión anónima, sin contraseñas). Es el nivel
-  adecuado para uso familiar/privado. Si más adelante quieres restringirlo
-  por persona (usuario y contraseña reales), lo podemos migrar sin perder
-  los datos ya guardados.
-- No se requiere ningún paso de "build": es HTML/CSS/JS puro en un solo
-  archivo, así que cualquier hosting estático (Vercel, Netlify, GitHub Pages)
-  sirve igual de bien.
-- Puedes revisar o ajustar la configuración de Firebase en cualquier momento
-  desde https://console.firebase.google.com/project/casa-al-dia-ceb5a
-- Hubo un problema detectado y corregido: al abrir la app en dos pestañas/dispositivos
-  casi al mismo tiempo, cada una podía "sembrar" sus propios datos de arranque
-  (miembro inicial, despensa, etc.), duplicándolos. Ya se corrigió con un candado
-  atómico en Firestore (un campo `seeded` en `settings/config`) para que la siembra
-  inicial ocurra una sola vez sin importar cuántos dispositivos abran la app a la vez.
-  Los duplicados que ya existían en tu base de datos (dos "Erick", varios artículos de
-  despensa repetidos) siguen ahí — bórralos manualmente desde la app o desde
-  https://console.firebase.google.com/project/casa-al-dia-ceb5a/firestore si quieres
-  limpiarlos.
+| Archivo | Responsabilidad |
+|---|---|
+| `core.js` | Dinero en centavos, fechas de México, reparto y saldo |
+| `purchase-service.js` | Compra, aportaciones, stock, adelantos y correcciones vinculadas |
+| `bill-service.js` | Pagos por vencimiento y calendario con fecha ancla |
+| `store.js` | Transacciones, idempotencia, validación y auditoría |
+| `index.html` | Vistas, formularios y comandos de aplicación |
+| `api/parse-ticket.js` | Lectura autorizada, límites persistentes y revisión del ticket |
+| `api/settle.js` | Verifica el saldo vigente antes de registrar una transferencia |
+| `api/close-cycle.js` | Conciliación y cierre con lectura consistente de todos los movimientos |
+| `server/firebase.js` | Verificación de token, permisos y credenciales de servidor |
+| `firestore.rules` | Acceso, validación básica y protección de ciclos cerrados |
+| `scripts/` | Build, auditoría, migración, respaldo y restauración |
+
+[Alcance y límites](docs/ARQUITECTURA.md) · [Trabajo con Claude](docs/PARA-CLAUDE.md)
+
+## Integración del 26 de octubre
+
+Esta rama incorpora las correcciones del PR #1 sobre main `b251099`, conservando tickets agrupados, gastos espontáneos, pagos entre varios y lectura de fecha/tienda. Las vistas de servicios/compras filtran reportes; no generan saldos independientes. Las reposiciones se pueden posponer siete días. Los precios se comparan con promedio ponderado por cantidad.
+
+La validación local no activa producción. Ejecutar tareas administrativas requiere una sesión o credenciales verificadas en el entorno que las ejecuta; ni este README ni una conexión a GitHub conceden acceso a Firebase o Vercel. Ver ACTIVACION. No fusionar simultáneamente el PR antiguo: esta entrega lo reemplaza funcionalmente.
+
+
+## Acceso para respaldos
+
+El respaldo completo de Firestore se prepara con `scripts/backup.js`; incluye planes guardados en `settings`, préstamos privados y auditoría. Puede usar las credenciales del entorno del servidor o una sesión Google con Application Default Credentials (ADC), con proyecto explícito. Consultar [Respaldo con acceso autorizado](docs/RESPALDO.md). La existencia del script y las pruebas automatizadas no acreditan que haya acceso administrativo ni que se haya creado un respaldo real.
+
