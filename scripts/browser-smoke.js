@@ -7,7 +7,7 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
  let browser;try{browser=await chromium.launch({headless:true,...(process.env.CASA_CHROMIUM_PATH?{executablePath:process.env.CASA_CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--single-process','--no-zygote','--in-process-gpu','--use-gl=angle','--use-angle=swiftshader']}:{} )});}catch(e){server.close();throw e;}const page=await browser.newPage({viewport:{width:1365,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://**/*',r=>r.abort());
  try{
-  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#loginEmail').waitFor();
+  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#loginEmail').waitFor();if(process.env.CASA_VISUAL_AUDIT==='1'){await require('./visual-audit')(page);assert.deepEqual(errors,[]);return;}
   const photoResult=await page.evaluate(async()=>{
    const canvas=document.createElement('canvas');canvas.width=2400;canvas.height=2400;
    const context=canvas.getContext('2d'),image=context.createImageData(canvas.width,canvas.height);let seed=123456789;
@@ -132,6 +132,7 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   const collectedDialog=d=>d.type()==='prompt'?d.accept('2020-02-16'):d.accept();page.on('dialog',collectedDialog);await page.getByRole('button',{name:'Pagar con aportaciones recibidas',exact:true}).click();await page.getByText('Pago al proveedor registrado; aportaciones aplicadas una sola vez',{exact:true}).waitFor();page.off('dialog',collectedDialog);
   assert.equal(await page.evaluate(()=>Object.keys(window.__qa.state.db.snapshot()).filter(k=>k.startsWith('billPayments/')).length),1);assert.equal(await page.getByRole('button',{name:'Pagar con aportaciones recibidas',exact:true}).count(),0);
   await page.evaluate(()=>{const q=window.__qa;Object.assign(q.state,window.__financeOriginal);q.financeIdentity('a','member');App.setCuentasTab('gastos');});
-  assert.deepEqual(errors,[]);console.log('Navegación, saldo acumulado y formulario de inventario verificados en escritorio y móvil.');
+  await require('./visual-audit')(page);assert.deepEqual(errors,[]);console.log('Navegación, saldo acumulado y formulario de inventario verificados en escritorio y móvil.');
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
+

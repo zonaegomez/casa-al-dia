@@ -22,9 +22,9 @@
     --ink:#201F2C; --ink-soft:#716F84; --ink-faint:#9896AB;
     --accent:#6258E8; --accent-ink:#FFFFFF; --accent-soft:#EEEBFF; --accent-strong:#4A3FC4;
     --accent2:#EC4899; --accent2-ink:#FFFFFF; --accent2-soft:#FCE7F3; --accent2-strong:#BE185D;
-    --good:#22C55E; --good-soft:#E7F9EE;
-    --warn:#F59E0B; --warn-soft:#FEF3DC;
-    --bad:#EF4444; --bad-soft:#FDE8E8;
+    --good:#15803D; --good-soft:#E7F9EE;
+    --warn:#A85A00; --warn-soft:#FEF3DC;
+    --bad:#DC2626; --bad-soft:#FDE8E8;
     --shadow-sm:0 1px 2px rgba(32,31,44,.06);
     --shadow-md:0 10px 26px -12px rgba(32,31,44,.20);
     --shadow-lg:0 26px 60px -18px rgba(32,31,44,.28);
@@ -489,6 +489,82 @@
   .finance-detail-body summary{cursor:pointer;padding:8px 0;}
   .finance-detail-body p{font-size:13px;line-height:1.7;}
   @media(max-width:600px){.finance-month-summary{padding:18px;}.finance-month-summary>.btn{width:100%;}.finance-heading{align-items:flex-start;}}
+
+  /* Shared spacing and small-screen layout safeguards. */
+  .btn{justify-content:center;line-height:1.4;max-width:100%;}
+  .btn-icon{flex-shrink:0;}
+  .grid-2{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);}
+  .grid-2>*,.panel-title,.bill-name,.field,.field-row>*{min-width:0;}
+  .panel-header,.bill-actions,.mode-options{flex-wrap:wrap;}
+  .panel-title,.bill-name,.page-title,.page-sub,.list-sub,.member-row-name{overflow-wrap:anywhere;}
+  .card-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));}
+  .room-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));}
+  .list-title{white-space:normal;overflow-wrap:anywhere;}
+  .panel-body.pad0 .list-item{padding-inline:17px;}
+  .member-row-stats{flex-wrap:wrap;gap:4px 12px;}
+  .member-switch>span:not(.avatar):not(.switch-caret){min-width:0;}
+  .member-switch .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .search{min-width:0;max-width:100%;}
+  .modal-overlay{padding:20px;}
+  .modal{max-height:calc(100dvh - 40px);overscroll-behavior:contain;}
+  .modal-header{gap:12px;align-items:flex-start;}
+  .modal-header h3{min-width:0;overflow-wrap:anywhere;}
+  .modal-header>.btn{flex-shrink:0;}
+  .modal-body{min-width:0;overflow-wrap:anywhere;}
+  .modal-body>p{margin:0;}
+  .modal-body[style*="padding:0"] .list-item{padding-inline:19px;}
+  .modal-foot{flex-wrap:wrap;align-items:center;gap:10px;padding:4px 19px 19px;}
+  .modal-foot .btn{min-height:40px;}
+  .field-row{grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;}
+  .field input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]),.field select,.field textarea{width:100%;min-width:0;max-width:100%;}
+  .field input[type="checkbox"],.field input[type="radio"]{flex-shrink:0;accent-color:var(--accent);}
+  .field small{font-size:12px;line-height:1.5;color:var(--ink-soft);}
+  fieldset.field{margin:0;padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);}
+  fieldset.field legend{max-width:100%;padding:0 5px;font-size:12px;font-weight:700;color:var(--ink-soft);}
+  .ticket-product-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(90px,1fr) auto;align-items:end;gap:8px;}
+  .ticket-assignment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:8px;}
+  .ticket-inventory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,135px),1fr));gap:8px;margin-top:8px;}
+  .toast-wrap{max-width:min(420px,calc(100vw - 28px));right:14px;}
+  .toast{overflow-wrap:anywhere;}
+  .toast>span{min-width:0;}
+  body.modal-open{overflow:hidden;}
+  @media(max-width:980px){.grid-2{grid-template-columns:minmax(0,1fr);}}
+  @media(max-width:760px){
+    .main{padding-bottom:calc(100px + env(safe-area-inset-bottom));}
+    .mobile-topbar .brand{min-width:0;}
+    .mobile-topbar .brand-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .mobile-topbar .member-switch{min-width:0;max-width:60%;}
+    .mobile-nav .nav-item{flex-shrink:0;}
+    .list-item{flex-wrap:wrap;}
+    .list-main{flex:1 1 140px;}
+    .list-end{max-width:100%;margin-left:auto;flex-wrap:wrap;}
+    .row-actions-wrap{max-width:100%;}
+    .bill-actions .btn{min-height:40px;}
+    .toast-wrap{bottom:calc(94px + env(safe-area-inset-bottom));}
+    .field input,.field select,.field textarea{font-size:16px;}
+  }
+  @media(max-width:480px){
+    .modal-overlay{padding:12px;}
+    .modal{max-height:calc(100dvh - 24px);}
+    .modal-header{padding:16px 16px 10px;}
+    .modal-body{padding:6px 16px 16px;}
+    .modal-foot{padding:4px 16px 16px;}
+    .modal-foot .btn{min-height:44px;flex:1 1 140px;}
+    .field-row,.ticket-assignment-grid{grid-template-columns:minmax(0,1fr);}
+    .ticket-product-grid{grid-template-columns:minmax(0,1fr) 40px;}
+    .ticket-product-grid>.field:first-child{grid-column:1/-1;}
+    .ticket-product-grid>.btn{width:40px;min-height:40px;}
+    .kpi-grid{grid-template-columns:minmax(0,1fr);}
+    .topbar-actions{width:100%;}
+    .topbar-actions>.btn{flex:1 1 auto;}
+    .bill-actions>.btn-primary{flex:1 1 100%;}
+    .quick-action{min-width:0;gap:8px;padding:11px 10px;}
+    .quick-action .qicon{width:30px;height:30px;}
+    .quick-action>div{min-width:0;overflow-wrap:anywhere;}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;}
+  }
 
 </style>
 <script>
@@ -2108,9 +2184,10 @@ function pageConfig(){
 /* ================= MODALS ================= */
 function openModal(html){
   state.formOperationId=uid();
+  document.body.classList.add('modal-open');
   document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" onmousedown="if(event.target===this) App.closeModal()"><div class="modal">${html}</div></div>`;
 }
-function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+function closeModal(){ document.getElementById('modalRoot').innerHTML='';document.body.classList.remove('modal-open'); }
 
 function modalAccount(){
  const m=currentMember();
@@ -2264,17 +2341,17 @@ function ticketRowHtml(items, itemId, freeName, cost){
   const members=activeMembers().slice().sort((a,b)=>a.name.localeCompare(b.name));
   const displayName=isFree?(freeName||''):(items.find(it=>it.id===itemId)?.name||freeName||'');
   return `<div class="ticket-row" id="${rowId}" style="display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
-    <div style="display:grid; grid-template-columns:minmax(0,2fr) minmax(100px,1fr) auto; align-items:end; gap:8px;">
+    <div class="ticket-product-grid">
       <div class="field" style="min-width:0; margin:0;"><label>Producto</label><input class="tkDisplayName" value="${esc(displayName)}" placeholder="Nombre del producto"></div>
       <div class="field" style="min-width:0; margin:0;"><label>Total (MXN)</label><input class="tkCost" type="number" step="any" min="0" value="${cost!=null?cost:0}" oninput="App.updateTicketTotal()"></div>
       <button class="btn btn-sm btn-ghost" onclick="App.removeTicketRow('${rowId}')" title="Quitar línea">${icon('x')}</button>
     </div>
-    <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:end; gap:8px;">
+    <div class="ticket-assignment-grid">
       <div class="field" style="margin:0;"><label>¿Para quién es este producto?</label><select class="tkDistribution" onchange="App.onTicketDistributionChange('${rowId}')"><option value="grupal">Para la casa</option><option value="individual">Una persona</option><option value="personalizado">Dos o más personas</option></select></div>
       <div class="field tkIndividualWrap" style="display:none; margin:0;"><label>Persona</label><select class="tkIndividualMember">${members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></div>
     </div>
     <div class="tkCustomPeople" hidden>${members.map(m=>'<label style="display:inline-flex;align-items:center;margin:0 12px 4px 0"><input type="checkbox" class="tk-line-beneficiary" value="'+m.id+'" checked> '+esc(m.name)+'</label>').join('')}</div>
-    <details><summary>Inventario y cantidad (opcional)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin-top:8px;">
+    <details><summary>Inventario y cantidad (opcional)</summary><div class="ticket-inventory-grid">
       <div class="field" style="margin:0;"><label>Vincular producto</label><select class="tkItem" onchange="App.onTicketItemChange('${rowId}')"><option value="__free__" ${isFree?'selected':''}>Sin inventario</option>${items.map(it=>`<option value="${it.id}" ${it.id===itemId?'selected':''}>${esc(it.name)}</option>`).join('')}</select></div>
       <div class="field" style="margin:0;"><label>Cantidad comprada</label><input class="tkQty" type="number" step="any" min="0" value="1"></div>
       <div class="field" style="margin:0;"><label>Unidades por paquete</label><input class="tkPack" type="number" min="1" step="1" value="1"><small>Sueltas: 1 · paquete de 30: 30.</small></div>
@@ -3444,3 +3521,4 @@ boot();
 </script>
 </body>
 </html>
+
