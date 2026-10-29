@@ -178,3 +178,42 @@ test('cada integrante modifica solo su perfil; el administrador gestiona altas y
  await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'settings/config'),{revision:0},{merge:true}));
  await assertSucceeds(update('admin','b',{active:false}));
 });
+
+test('invitaciones: correo verificado, vínculo único, cancelación y vencimiento sin tocar gastos anteriores',async()=>{
+ const assert=require('node:assert/strict'),{initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore'),I=require('../server/invitations'),C=require('../core');
+ const app=initializeApp({projectId:'demo-casa-al-dia'},'invitation-test'),db=getFirestore(app),now=Date.now();
+ try{
+  await db.doc('members/a').set({name:'A',active:true});await db.doc('members/b').set({name:'B',active:true});await db.doc('movements/old').set({type:'compra',total:300,date:'2026-10-20',participantIds:['a','b'],memberId:'a'});
+  const previous=(await db.doc('movements/old').get()).data(),config=(await db.doc('settings/config').get()).data();
+  await assert.rejects(I.createInvitation(db,'user',{name:'Invitada',email:'new@example.test'},now),/administrador/);
+  const inv=await I.createInvitation(db,'admin',{name:'Invitada',email:' NEW@example.test '},now),pending=(await db.doc('members/'+inv.memberId).get()).data();
+  assert.equal(pending.active,false);assert.equal(pending.invitationPending,true);assert.ok(!(await I.listInvitations(db,'admin')).invitations[0].secretHash);
+  const stored=(await db.doc('invitations/'+inv.id).get()).data();assert.ok(!JSON.stringify(stored).includes(inv.token.split('.')[1]));
+  const identity={uid:'new-user',email:'new@example.test',email_verified:true,firebase:{sign_in_provider:'password'}};
+  await assert.rejects(I.acceptInvitation(db,{...identity,email_verified:false},inv.token,now),/Verifica/);
+  await assert.rejects(I.acceptInvitation(db,{...identity,email:'other@example.test'},inv.token,now),/correo/);
+  await assert.rejects(I.acceptInvitation(db,identity,inv.token,now+8*86400000),/vencida/);
+  await assertFails(getDoc(doc(dbFor('new-user'),'bills/luz')));
+  await assertFails(getDoc(doc(dbFor('admin'),'invitations/'+inv.id)));
+  await I.acceptInvitation(db,identity,inv.token,now);await I.acceptInvitation(db,identity,inv.token,now);
+  assert.equal((await db.doc('access/new-user').get()).data().role,'member');
+  assert.equal((await db.doc('access/new-user').get()).data().memberId,inv.memberId);
+  assert.equal((await db.doc('members/'+inv.memberId).get()).data().active,true);
+  await assertSucceeds(getDoc(doc(dbFor('new-user'),'bills/luz')));
+  assert.deepEqual((await db.doc('movements/old').get()).data(),previous);assert.deepEqual((await db.doc('settings/config').get()).data().legacyParticipantIds,config.legacyParticipantIds);
+  assert.equal(C.balances([{...previous,amount:previous.total}],[{id:'a'},{id:'b'},{id:inv.memberId}],[]).balances.find(b=>b.member.id===inv.memberId).fairShare,0);
+  await assert.rejects(I.createInvitation(db,'admin',{name:'Otra',email:'second@example.test',memberId:inv.memberId},now),/acceso vinculado/);
+  const cancel=await I.createInvitation(db,'admin',{name:'Cancelada',email:'cancel@example.test'},now);await I.revokeInvitation(db,'admin',cancel.id);await assert.rejects(I.acceptInvitation(db,{...identity,uid:'cancel-user',email:'cancel@example.test'},cancel.token,now),/cancelada/);
+  assert.equal((await db.doc('members/'+cancel.memberId).get()).data().active,false);
+  const first=await I.createInvitation(db,'admin',{name:'Rotación',email:'rotate@example.test'},now),second=await I.createInvitation(db,'admin',{name:'Rotación',email:'rotate@example.test'},now+1000);
+  assert.equal(first.memberId,second.memberId);await assert.rejects(I.invitationInfo(db,first.token,now+1001),/inválida/);assert.equal((await I.invitationInfo(db,second.token,now+1001)).status,'pending');
+  const same=await I.createInvitation(db,'admin',{name:'Un perfil',email:'one@example.test'},now);
+  await assert.rejects(I.createInvitation(db,'admin',{name:'Un perfil',email:'two@example.test',memberId:same.memberId},now),/otra invitación/);
+  const race=await I.createInvitation(db,'admin',{name:'Concurrente',email:'race@example.test'},now),r=await Promise.allSettled([I.acceptInvitation(db,{...identity,uid:'race-one',email:'race@example.test'},race.token,now),I.acceptInvitation(db,{...identity,uid:'race-two',email:'race@example.test'},race.token,now)]);assert.equal(r.filter(x=>x.status==='fulfilled').length,1);
+ }finally{await app.delete();}
+});
+
+test('foto de perfil se guarda en servidor solo para el titular; cliente no puede inyectarla',async()=>{
+ const assert=require('node:assert/strict'),{initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore'),{saveProfile}=require('../server/profile');const app=initializeApp({projectId:'demo-casa-al-dia'},'profile-server'),db=getFirestore(app);
+ try{await db.doc('members/a').set({name:'A',color:'#6258E8'});await db.doc('members/b').set({name:'B',color:'#16856B'});await assert.rejects(saveProfile(db,'user',{memberId:'b',name:'Otro',color:'#16856B',photoData:null}),/propio/);await saveProfile(db,'user',{memberId:'a',name:'Mi nombre',color:'#16856B',photoData:null});assert.equal((await db.doc('members/a').get()).data().name,'Mi nombre');const sdk=dbFor(),b=writeBatch(sdk);b.update(doc(sdk,'settings/config'),{revision:2,updatedBy:'user'});b.update(doc(sdk,'members/a'),{photoData:'https://example.test/tracker',updatedBy:'user'});await assertFails(b.commit());}finally{await app.delete();}
+});

@@ -8,6 +8,12 @@
     },
     "api/settle.js": {
       "maxDuration": 30
+    },
+    "api/invitations.js": {
+      "maxDuration": 30
+    },
+    "api/profile.js": {
+      "maxDuration": 30
     }
   },
   "headers": [

@@ -1,6 +1,6 @@
 const fs=require('node:fs');
 const {encode}=require('./codec');
-const COLLECTIONS=['access','settings','members','purchases','items','movements','bills','billPayments','billReceipts','reminders','closedCycles','settlements','debts','operations','privateLoans'];
+const COLLECTIONS=['access','settings','members','purchases','items','movements','bills','billPayments','billReceipts','reminders','closedCycles','settlements','debts','operations','privateLoans','invitations'];
 function argumentError(message){const e=Error(message);e.code='BACKUP_ARGUMENTS';return e;}
 function parseArgs(args){
  let path,adc=false,projectId;

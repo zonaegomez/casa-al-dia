@@ -50,7 +50,7 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
   const aligned=await page.evaluate(()=>[...document.querySelectorAll('th.num')].every(th=>getComputedStyle(th).textAlign==='right'));assert.ok(aligned);
   await page.evaluate(()=>{window.__qa.financeIdentity('a','member');App.go('config');});
   assert.equal(await page.getByTitle('Editar mi perfil').count(),1);
-  assert.equal(await page.getByRole('button',{name:'Agregar',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Invitar integrante',exact:true}).count(),0);
   const denied=await page.evaluate(()=>{try{App.openMemberForm('b');return false;}catch(e){return e.message.includes('propio perfil');}});assert.ok(denied);
   await page.getByTitle('Editar mi perfil').click();await page.locator('#mName').waitFor();await page.evaluate(()=>App.closeModal());
   await page.evaluate(()=>{App.go('cuentas');App.setCuentasTab('saldos');});
@@ -140,6 +140,27 @@ assert.equal(await page.locator('.settlement-alternative').count(),0);
   const collectedDialog=d=>d.type()==='prompt'?d.accept('2020-02-16'):d.accept();page.on('dialog',collectedDialog);await page.getByRole('button',{name:'Pagar con aportaciones recibidas',exact:true}).click();await page.getByText('Pago al proveedor registrado; aportaciones aplicadas una sola vez',{exact:true}).waitFor();page.off('dialog',collectedDialog);
   assert.equal(await page.evaluate(()=>Object.keys(window.__qa.state.db.snapshot()).filter(k=>k.startsWith('billPayments/')).length),1);assert.equal(await page.getByRole('button',{name:'Pagar con aportaciones recibidas',exact:true}).count(),0);
   await page.evaluate(()=>{const q=window.__qa;Object.assign(q.state,window.__financeOriginal);q.financeIdentity('a','member');App.setCuentasTab('gastos');});
+  // Profile upload and invitations use fictional local requests only.
+  await page.setViewportSize({width:390,height:844});
+  let savedProfile=null;
+  await page.route('**/api/profile',async route=>{savedProfile=route.request().postDataJSON();await route.fulfill({json:{saved:true}});});
+  await page.evaluate(()=>{const q=window.__qa;q.financeIdentity('a','member');q.passwordUser({uid:'qa-a',getIdToken:async()=>'qa-token'});App.openMemberForm('a');});
+  const profilePng=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=640;c.height=480;c.getContext('2d').fillRect(0,0,640,480);return c.toDataURL('image/png').split(',')[1];});
+  await page.locator('#profilePhotoFile').setInputFiles({name:'perfil.png',mimeType:'image/png',buffer:Buffer.from(profilePng,'base64')});
+  await page.locator('#profilePhotoPreview img').waitFor();
+  await page.locator('#modalRoot').getByRole('button',{name:'Guardar',exact:true}).click();await page.locator('#mName').waitFor({state:'detached'});
+  assert.equal(savedProfile.memberId,'a');assert.ok(savedProfile.photoData.startsWith('data:image/jpeg;base64,'));assert.ok(savedProfile.photoData.length<=45000);
+  await page.evaluate(photo=>{window.__qa.state.members.find(m=>m.id==='a').photoData=photo;window.__qa.render();},savedProfile.photoData);
+  assert.equal(await page.locator('#mobileTopbar .avatar img').count(),1);
+  await page.evaluate(()=>App.openMemberForm('a'));await page.getByRole('button',{name:'Quitar foto',exact:true}).click();await page.locator('#modalRoot').getByRole('button',{name:'Guardar',exact:true}).click();await page.locator('#mName').waitFor({state:'detached'});assert.equal(savedProfile.photoData,null);
+  await page.evaluate(()=>{window.__qa.state.members.find(m=>m.id==='a').photoData=null;window.__qa.financeIdentity('a','admin');App.openInviteForm();});
+  const invitationToken='invite-'+('a'.repeat(64))+'.'+('b'.repeat(64));let inviteRequest;
+  await page.route('**/api/invitations',async route=>{inviteRequest=route.request().postDataJSON();await route.fulfill({json:{name:'Persona nueva',email:'nueva@example.test',token:invitationToken,expiresAt:Date.now()+86400000}});});
+  await page.locator('#invName').fill('Persona nueva');await page.locator('#invEmail').fill('nueva@example.test');await page.getByRole('button',{name:'Generar invitación',exact:true}).click();await page.locator('#invLink').waitFor();assert.equal(inviteRequest.memberId,null);assert.equal(inviteRequest.action,'create');assert.ok((await page.locator('#invLink').inputValue()).endsWith('#invite='+invitationToken));await page.evaluate(()=>App.closeModal());
+  const invitePage=await page.context().newPage();invitePage.on('pageerror',e=>errors.push(e.message));await invitePage.route('https://**/*',r=>r.abort());
+  await invitePage.goto('http://127.0.0.1:'+server.address().port+'/#invite='+invitationToken);await invitePage.locator('#inviteEmail').waitFor();assert.equal(await invitePage.locator('#loginEmail').count(),0);
+  await invitePage.evaluate(()=>{window.__qa.passwordUser({uid:'wrong-email',email:'other@example.test',reload:async()=>{},getIdToken:async()=>'qa-token'});window.__qa.render();});
+  await invitePage.route('**/api/invitations',r=>r.fulfill({status:403,json:{error:'Inicia sesión con el correo al que se dirigió la invitación'}}));await invitePage.getByRole('button',{name:'Ya verifiqué mi correo · Entrar',exact:true}).click();await invitePage.getByText('Inicia sesión con el correo al que se dirigió la invitación',{exact:true}).waitFor();assert.equal(await invitePage.locator('.sidebar .nav-item').count(),0);await invitePage.close();
   await require('./visual-audit')(page);assert.deepEqual(errors,[]);console.log('Navegación, saldo acumulado y formulario de inventario verificados en escritorio y móvil.');
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

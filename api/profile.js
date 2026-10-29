@@ -1,0 +1,2 @@
+const {authorize,body,fail}=require('../server/firebase');const {saveProfile}=require('../server/profile');
+module.exports=async(req,res)=>{res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Método no permitido'});try{if(Number(req.headers['content-length']||0)>50000)return res.status(413).json({error:'Foto demasiado grande'});const {uid,db}=await authorize(req);return res.status(200).json(await saveProfile(db,uid,body(req)));}catch(e){return fail(res,e);}};

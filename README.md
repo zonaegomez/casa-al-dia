@@ -69,3 +69,7 @@ La validación local no activa producción. Ejecutar tareas administrativas requ
 
 El respaldo completo de Firestore se prepara con `scripts/backup.js`; incluye planes guardados en `settings`, préstamos privados y auditoría. Puede usar las credenciales del entorno del servidor o una sesión Google con Application Default Credentials (ADC), con proyecto explícito. Consultar [Respaldo con acceso autorizado](docs/RESPALDO.md). La existencia del script y las pruebas automatizadas no acreditan que haya acceso administrativo ni que se haya creado un respaldo real.
 
+
+## Invitaciones y perfiles
+
+El administrador puede generar invitaciones vinculadas a un correo y compartir su enlace. Cada persona verifica su correo, elige su contraseña y edita únicamente su perfil y foto. Ver [uso y permisos](docs/INVITACIONES-Y-PERFILES.md).

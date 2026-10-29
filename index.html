@@ -121,6 +121,11 @@
     background:var(--surface-2); border:1px solid var(--border); cursor:pointer; text-align:left; width:100%;
     transition:border-color .15s ease, transform .1s ease;
   }
+  .avatar{overflow:hidden;flex-shrink:0;}
+  .avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+  .invitation-access{max-width:480px;margin:40px auto;}
+  .invite-link{overflow-wrap:anywhere;word-break:break-all;}
+  .member-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
   .member-switch:hover{border-color:var(--accent); transform:translateY(-1px);}
   .avatar{
     width:27px; height:27px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
@@ -848,6 +853,20 @@ let accountRole=null;
 let accountMemberId=null, privateLoans=[], privateLoanMessage='', privateLoanUnsubscribe=null;
 let signedInUser=null, accessReady=false, syncReady=false, accessMessage='', unsubscribers=[];
 let rawBills=[], billPayments=[], loadingCollections=new Set();
+let profileDraftPhoto=null, invitationMessage='', invitationInfo=null, invitationToken='';
+try{const hash=typeof location!=='undefined'?location.hash:'';const token=new URLSearchParams(hash.replace(/^#/, '')).get('invite');if(token&&/^invite-[a-f0-9]{64}\.[a-f0-9]{64}$/.test(token))invitationToken=token;}catch{}
+async function invitationRequest(input,authenticated=true){
+ const headers={'Content-Type':'application/json'};
+ if(authenticated){if(!signedInUser)throw Error('Inicia sesión');headers.Authorization='Bearer '+await signedInUser.getIdToken(true);}
+ const response=await fetch('/api/invitations',{method:'POST',headers,body:JSON.stringify(input)}),data=await response.json();if(!response.ok)throw Error(data.error||'No se pudo procesar la invitación');return data;
+}
+function renderInvitationAccess(){
+ const user=signedInUser;
+ document.getElementById('main').innerHTML=`<div class="panel invitation-access"><div class="panel-body"><h1>Unirte a la casa</h1><p>${invitationInfo?'Invitación para '+esc(invitationInfo.name):'Usa el correo al que se dirigió esta invitación.'}</p><p>El administrador no elige ni conoce tu contraseña. Tus gastos anteriores no se modifican al entrar.</p>
+ ${user?`<p>Sesión: <strong>${esc(user.email||'')}</strong></p><p>Verifica tu correo y después acepta la invitación. Si ya está verificado, continúa directamente.</p><button class="btn" onclick="App.sendInviteVerification()">Enviar verificación de correo</button><button class="btn btn-primary" onclick="App.acceptInvite()">Ya verifiqué mi correo · Entrar</button><button class="btn btn-ghost" onclick="App.signOut()">Usar otra cuenta</button>`:`<div class="field"><label for="inviteEmail">Tu correo invitado</label><input id="inviteEmail" type="email" autocomplete="username"></div><div class="field"><label for="invitePassword">Contraseña (mínimo 8 caracteres para cuenta nueva)</label><input id="invitePassword" type="password" autocomplete="new-password" minlength="8"></div><button class="btn btn-primary" onclick="App.registerInvite()">Crear mi cuenta</button><button class="btn" onclick="App.loginInvite()">Ya tengo cuenta · Iniciar sesión</button>`}
+ <p role="status" aria-live="polite">${esc(invitationMessage)}</p><button class="btn btn-ghost" onclick="App.leaveInvite()">Salir de la invitación</button></div></div>`;
+}
+
 const Data = createCasaStore({state,core:CasaCore,db:()=>state.db,actor:()=>signedInUser&&signedInUser.uid,ready:()=>accessReady&&syncReady&&navigator.onLine,newId:uid});
 const Purchases=createPurchaseService({store:Data,C:CasaCore,members:()=>state.members});
 const BillService=createBillService({store:Data,C:CasaCore,addMonths,members:()=>state.members});
@@ -859,6 +878,7 @@ function requireMember(){const m=currentMember();if(!m||m.active===false)throw E
 function operationMeta(kind){return {kind,opId:state.formOperationId||uid()};}
 function renderAccess(){
  document.getElementById('sidebar').innerHTML='';document.getElementById('mobileNav').innerHTML='';document.getElementById('mobileTopbar').innerHTML='';
+ if(invitationToken){renderInvitationAccess();return;}
  document.getElementById('main').innerHTML=`<div class="panel" style="max-width:440px;margin:60px auto"><div class="panel-body"><h1>Casa al Día</h1><p>${esc(accessMessage||'Ingresa con tu cuenta autorizada para esta casa.')}</p>
  ${signedInUser?`<p>UID: ${esc(signedInUser.uid)}</p><button class="btn" onclick="App.signOut()">Cerrar sesión</button>`:`<div class="field"><label>Correo</label><input id="loginEmail" type="email" autocomplete="username"></div><div class="field"><label>Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password"></div><button class="btn btn-primary" onclick="App.login()">Entrar</button>`}
  <p class="page-sub">${navigator.onLine?'':'Sin conexión. Los cambios están bloqueados hasta sincronizar.'}</p><button class="btn btn-ghost" onclick="App.exportLocalBackup()">Descargar respaldo anterior de este dispositivo</button></div></div>`;
@@ -867,7 +887,8 @@ function renderAccess(){
 function boot(){
  render();
  if(typeof firebase==='undefined'){accessMessage='No se pudo cargar Firebase. Revisa tu conexión y vuelve a cargar.';render();return;}
- firebase.initializeApp(firebaseConfig);
+ firebase.initializeApp(firebaseConfig);firebase.auth().languageCode='es';
+ if(invitationToken)invitationRequest({action:'info',token:invitationToken},false).then(info=>{invitationInfo=info;render();}).catch(e=>{invitationMessage=e.message;render();});
  firebase.auth().onAuthStateChanged(async user=>{
    localStorage.removeItem('casa_al_dia_member_id');
    unsubscribers.forEach(f=>f());unsubscribers=[];if(privateLoanUnsubscribe)privateLoanUnsubscribe();privateLoanUnsubscribe=null;privateLoans=[];privateLoanMessage='';accountMemberId=null;accountRole=null;state.inventoryUndo=null;accessReady=false;syncReady=false;signedInUser=user;
@@ -877,6 +898,7 @@ function boot(){
    if(!user)return;
    if(user.isAnonymous){await firebase.auth().signOut();return;}
    state.db=firebase.firestore();
+   if(invitationToken){render();return;}
    try{
      const access=await state.db.doc('access/'+user.uid).get({source:'server'});
      if(signedInUser?.uid!==user.uid)return;
@@ -895,7 +917,7 @@ function subscribeAll(){
   const ref=coll==='settings'?state.db.doc('settings/config'):state.db.collection(coll);
   const stop=ref.onSnapshot({includeMetadataChanges:true},snap=>{
    if(coll==='settings'){if(snap.exists)state.settings=Object.assign({},state.settings,snap.data());}
-   else{const rows=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(coll==='bills')rawBills=rows;else if(coll==='billPayments')billPayments=rows;else state[coll]=rows.filter(x=>!x.voided&&(coll!=='items'||!x.archived));}
+   else{const rows=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(coll==='members')for(const m of rows)if(!/^#[a-f0-9]{6}$/i.test(m.color||''))m.color='#6258E8';if(coll==='bills')rawBills=rows;else if(coll==='billPayments')billPayments=rows;else state[coll]=rows.filter(x=>!x.voided&&(coll!=='items'||!x.archived));}
    mergeBills();
    if(!snap.metadata.fromCache&&!snap.metadata.hasPendingWrites)loadingCollections.delete(coll);
    syncReady=loadingCollections.size===0&&navigator.onLine;
@@ -915,6 +937,7 @@ function subscribePrivateLoans(){
  },()=>{if(signedInUser?.uid!==sessionUid)return;privateLoans=[];privateLoanMessage='Préstamos privados no disponibles. Verifica la vinculación de tu cuenta y las reglas de Firebase.';closeModal();render();});
 }
 function render(){
+  if(invitationToken){renderAccess();return;}
   if(!accessReady||!syncReady){renderAccess();return;}
   renderSidebar();
   renderMobileTopbar();
@@ -922,6 +945,10 @@ function render(){
   renderMain();
 }
 
+function avatarContents(member){
+ const photo=member?.photoData;
+ return typeof photo==='string'&&photo.length<=45000&&/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo)?`<img src="${photo}" alt="" loading="lazy">`:initials(member?.name||'?');
+}
 function currentMember(){
   return state.members.find(m=>m.id===accountMemberId) || null;
 }
@@ -1013,7 +1040,7 @@ function renderSidebar(){
       </div>
     </div>
     <button class="member-switch" onclick="App.openAccount()">
-      ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>`
+      ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${avatarContents(m)}</span>`
           : `<span class="avatar" style="background:var(--ink-faint)">?</span>`}
       <span>
         <div class="label">Cuenta activa</div>
@@ -1050,7 +1077,7 @@ function renderMobileTopbar(){
       <div class="brand-name">${esc(state.settings.householdName||'Mi Casa')}</div>
     </div>
     <button class="member-switch" onclick="App.openAccount()">
-      ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>`
+      ${m ? `<span class="avatar" style="background:${m.color||'#3E6DF6'}">${avatarContents(m)}</span>`
           : `<span class="avatar" style="background:var(--ink-faint)">?</span>`}
       <span>
         <div class="label">Cuenta activa</div>
@@ -1247,7 +1274,7 @@ function renderTopMembers(){
   return top.map(s=>{
     const m = s.member;
     return `<div class="member-row">
-      <span class="avatar" style="background:${m.color||'#3E6DF6'}">${initials(m.name)}</span>
+      <span class="avatar" style="background:${m.color||'#3E6DF6'}">${avatarContents(m)}</span>
       <div class="member-row-main">
         <div class="member-row-name">${esc(m.name)}</div>
         <div class="member-row-stats">
@@ -1741,7 +1768,7 @@ function saldosBody(activeCycle, gran){
           <tbody>${b.balances.map(row=>{
             const good = row.balance >= 0;
             return `<tr>
-              <td><div style="display:flex; align-items:center; gap:8px;"><span class="avatar" style="background:${row.member.color||'#3E6DF6'}; width:26px; height:26px; font-size:11px;">${initials(row.member.name)}</span>${esc(row.member.name)}</div></td>
+              <td><div style="display:flex; align-items:center; gap:8px;"><span class="avatar" style="background:${row.member.color||'#3E6DF6'}; width:26px; height:26px; font-size:11px;">${avatarContents(row.member)}</span>${esc(row.member.name)}</div></td>
               <td class="num">${fmtMoney(row.paid)}</td>
               <td class="num row-sub">${fmtMoney(row.fairShare)}</td>
               <td class="num" style="font-weight:700; color:${good?'var(--good)':'var(--bad)'}">${row.balance>0?'Por cobrar: ':row.balance<0?'Por pagar: ':'Sin pendiente '}${fmtMoney(Math.abs(row.balance))}<br><button class="btn btn-sm btn-ghost" onclick="App.explainBalance('${row.member.id}')">Ver cómo se calculó</button></td>
@@ -2126,16 +2153,16 @@ function pageConfig(){
     <div class="grid-2">
       <div class="panel">
         <div class="panel-header"><div class="panel-title">${icon('users')} Miembros de la casa</div>
-          ${accountRole==='admin'?`<button class="btn btn-sm btn-primary" onclick="App.openMemberForm(null)">${icon('plus')} Agregar</button>`:''}
+          ${accountRole==='admin'?`<button class="btn btn-sm btn-primary" onclick="App.openInviteForm()">${icon('plus')} Invitar integrante</button><button class="btn btn-sm" onclick="App.openInvitations()">Invitaciones</button>`:''}
         </div>
         <div class="panel-body pad0">
-          <p class="page-sub" style="padding:0 18px;">Cada integrante edita su propio nombre y color. Solo el administrador puede agregar, desactivar o reactivar integrantes; el historial se conserva.</p>
+          <p class="page-sub" style="padding:0 18px;">Cada integrante edita su propio nombre, color y foto. El administrador invita por correo y comparte el enlace de acceso. Un integrante nuevo empieza a compartir los gastos que se registren después de aceptar; los registros anteriores se conservan.</p>
           ${state.members.length? state.members.map(m=>`<div class="list-item">
-            <span class="avatar" style="background:${m.color}">${initials(m.name)}</span>
-            <div class="list-main"><div class="list-title">${esc(m.name)}${m.active===false?" (inactivo)":""}</div></div>
-            <div class="list-end">
+            <span class="avatar" style="background:${m.color}">${avatarContents(m)}</span>
+            <div class="list-main"><div class="list-title">${esc(m.name)}${m.invitationPending?' (invitación pendiente)':m.active===false?' (inactivo)':''}</div></div>
+            <div class="list-end member-actions">
               ${m.id===accountMemberId?`<button class="btn btn-sm btn-ghost" title="Editar mi perfil" onclick="App.openMemberForm('${m.id}')">${icon('edit')} Mi perfil</button>`:'<span class="row-sub">Perfil personal</span>'}
-              ${accountRole==='admin'?(m.active===false?`<button class="btn btn-sm" onclick="App.reactivateMember('${m.id}')">Reactivar</button>`:`<button class="btn btn-sm btn-ghost" title="Desactivar integrante" onclick="App.confirmDeleteMember('${m.id}')">Desactivar</button>`):''}
+              ${accountRole==='admin'&&!m.invitationPending?(m.active===false?`<button class="btn btn-sm" onclick="App.reactivateMember('${m.id}')">Reactivar</button>`:`<button class="btn btn-sm btn-ghost" title="Desactivar integrante" onclick="App.confirmDeleteMember('${m.id}')">Desactivar</button>`):''}
             </div>
           </div>`).join('') : emptyBlock('users', 'Agrega a quienes viven en casa para saber quién registró cada gasto.')}
         </div>
@@ -2205,7 +2232,7 @@ function modalAccount(){
  <div class="modal-body"><div class="field"><label>Cuenta activa</label><strong>${m?esc(m.name):'Vinculación pendiente'}</strong></div><p>${esc(signedInUser?.email||'')}</p>
  <p>${m?'Este es el integrante vinculado a tu acceso. En compras y servicios puedes indicar quién pagó, aunque sea otra persona.':'El administrador debe vincular tu cuenta con un integrante antes de registrar movimientos personales.'}</p>
  <p>Para entrar con otro integrante, cambia de cuenta e inicia sesión con su correo y contraseña.</p></div>
- <div class="modal-foot"><button class="btn" onclick="App.openChangePassword()">Cambiar contraseña</button><button class="btn btn-primary" onclick="App.signOut()">Cambiar de cuenta</button></div>`);
+ <div class="modal-foot">${m?`<button class="btn" onclick="App.openMemberForm('${m.id}')">Editar mi perfil</button>`:''}<button class="btn" onclick="App.openChangePassword()">Cambiar contraseña</button><button class="btn btn-primary" onclick="App.signOut()">Cambiar de cuenta</button></div>`);
 }
 
 function modalChangePassword(){
@@ -2220,15 +2247,26 @@ function modalChangePassword(){
  <div class="modal-foot"><button type="button" class="btn" onclick="App.openAccount()">Volver</button><button id="passwordSave" type="submit" class="btn btn-primary">Guardar contraseña</button></div></form>`);
 }
 
+function modalInviteForm(){
+ if(accountRole!=='admin')throw Error('Solo el administrador invita integrantes');
+ openModal(`<div class="modal-header"><h3>Invitar integrante</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div><div class="modal-body"><p>Genera un enlace para un correo específico. Compártelo por correo o mensaje; no se envía automáticamente. Vence en 7 días.</p><div class="field"><label for="invName">Nombre</label><input id="invName" maxlength="120" placeholder="Nombre del nuevo integrante"></div><div class="field"><label for="invEmail">Correo de la persona</label><input id="invEmail" type="email" autocomplete="off"></div><details><summary>Vincular un integrante ya registrado</summary><div class="field"><label for="invMember">Perfil existente sin acceso</label><select id="invMember" onchange="App.setInvitationMember(this.value)"><option value="">Crear un integrante nuevo</option>${state.members.filter(m=>!m.accountUid&&!m.invitationPending).map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select><small>El servidor comprobará que no tenga una cuenta vinculada. Sus gastos e historial se conservan.</small></div></details><p>La persona crea su contraseña y verifica su correo. No se le asignarán gastos ni planes de pago anteriores.</p></div><div class="modal-foot"><button class="btn btn-primary" onclick="App.createInvite()">Generar invitación</button></div>`);
+}
+function showInvitationLink(result){
+ const link=location.origin+location.pathname+'#invite='+result.token;
+ openModal(`<div class="modal-header"><h3>Invitación lista para compartir</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div><div class="modal-body"><p>Para <strong>${esc(result.name)}</strong>, correo <strong>${esc(result.email)}</strong>.</p><p>Comparte el enlace únicamente con esa persona. Solo podrá aceptarlo con ese correo verificado. Generar el enlace no envía un correo.</p><div class="field"><label for="invLink">Enlace de invitación</label><textarea id="invLink" readonly rows="4">${esc(link)}</textarea></div><p>Vence: ${esc(new Date(result.expiresAt).toLocaleDateString('es-MX'))}. Si lo pierdes, genera otro desde Invitaciones; el anterior dejará de funcionar.</p></div><div class="modal-foot"><button class="btn btn-primary" onclick="App.copyInviteLink()">Copiar enlace</button></div>`);
+}
 function assertMemberProfileAccess(id){
   if(id ? id!==accountMemberId : accountRole!=='admin')throw Error(id?'Solo puedes editar tu propio perfil.':'Solo el administrador agrega integrantes.');
 }
 function modalMemberForm(id){
+  if(!id){modalInviteForm();return;}
   assertMemberProfileAccess(id);
   const m = id ? state.members.find(x=>x.id===id) : null;
+  profileDraftPhoto=m?.photoData||null;
   openModal(`
     <div class="modal-header"><h3>${m?'Editar miembro':'Nuevo miembro'}</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
+      <div class="field"><label>Foto de perfil</label><div id="profilePhotoPreview"><span class="avatar" style="width:64px;height:64px;background:${m?.color||'#6258E8'}">${avatarContents(m)}</span></div><input id="profilePhotoFile" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onchange="App.selectProfilePhoto(this)"><small>Se recorta al centro y se guarda como miniatura. La verán los integrantes de esta casa.</small><button type="button" class="btn btn-sm" onclick="App.removeProfilePhoto()">Quitar foto</button></div>
       <div class="field"><label>Nombre</label><input id="mName" value="${m?esc(m.name):''}" placeholder="Nombre del integrante"></div>
       <div class="field"><label>Color</label><div class="swatches">${MEMBER_COLORS.map(c=>`<div class="swatch ${(m?m.color:MEMBER_COLORS[0])===c?'sel':''}" style="background:${c}" data-color="${c}" onclick="App.pickColor(this)"></div>`).join('')}</div></div>
     </div>
@@ -2688,6 +2726,26 @@ window.App = {
   setThemeMode(mode){ window.casaTheme.mode = mode; localStorage.setItem(window.CASA_THEME_KEY, JSON.stringify(window.casaTheme)); window.applyTheme(); render(); },
 
   openAccount(){ modalAccount(); },
+  openInviteForm(){modalInviteForm();},
+  setInvitationMember(id){const member=state.members.find(m=>m.id===id);if(member)document.getElementById('invName').value=member.name;},
+  async createInvite(){const result=await invitationRequest({action:'create',name:document.getElementById('invName').value.trim(),email:document.getElementById('invEmail').value.trim(),memberId:document.getElementById('invMember').value||null});showInvitationLink(result);},
+  async copyInviteLink(){const field=document.getElementById('invLink');try{await navigator.clipboard.writeText(field.value);toast('Enlace copiado; compártelo con la persona invitada');}catch{field.select();toast('Selecciona y copia el enlace para compartirlo');}},
+  async openInvitations(){const data=await invitationRequest({action:'list'});openModal(`<div class="modal-header"><h3>Invitaciones pendientes</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div><div class="modal-body">${data.invitations.length?data.invitations.map(inv=>`<div class="list-item"><div class="list-main"><strong>${esc(inv.name)}</strong><p class="page-sub">${esc(inv.email)} · ${inv.expiresAt<Date.now()?'Vencida':'Vence '+new Date(inv.expiresAt).toLocaleDateString('es-MX')}</p></div><div class="list-end member-actions"><button class="btn btn-sm" onclick="App.renewInvite('${inv.id}')">Nuevo enlace</button><button class="btn btn-sm" onclick="App.revokeInvite('${inv.id}')">Cancelar</button></div></div>`).join(''):'<p>No hay invitaciones pendientes.</p>'}</div>`);},
+  async renewInvite(id){const data=await invitationRequest({action:'list'}),inv=data.invitations.find(x=>x.id===id);if(!inv)throw Error('La invitación ya no está pendiente');showInvitationLink(await invitationRequest({action:'create',name:inv.name,email:inv.email,memberId:inv.memberId}));},
+  async revokeInvite(id){if(!confirm('¿Cancelar este enlace? La persona ya no podrá utilizarlo.'))return;await invitationRequest({action:'revoke',id});closeModal();toast('Invitación cancelada');},
+  async invitationUiAction(action){try{await action();}catch(e){invitationMessage=({'auth/email-already-in-use':'Ese correo ya tiene una cuenta. Usa Ya tengo cuenta para iniciar sesión.','auth/invalid-email':'Revisa el correo.','auth/invalid-credential':'Correo o contraseña incorrectos.','auth/weak-password':'La contraseña no cumple los requisitos. Usa una más larga.','auth/too-many-requests':'Se hicieron demasiados intentos. Espera unos minutos.','auth/network-request-failed':'Revisa tu conexión e inténtalo de nuevo.'})[e.code]||e.message||'No se pudo completar la acción';render();}},
+  async registerInvite(){return App.invitationUiAction(async()=>{const email=document.getElementById('inviteEmail').value.trim(),password=document.getElementById('invitePassword').value;if(password.length<8)throw Error('Usa al menos 8 caracteres');const result=await firebase.auth().createUserWithEmailAndPassword(email,password);await result.user.sendEmailVerification();invitationMessage='Te enviamos un correo de verificación. Ábrelo y vuelve a esta pestaña para aceptar la invitación.';render();});},
+  async loginInvite(){const email=document.getElementById('inviteEmail').value.trim(),password=document.getElementById('invitePassword').value;return App.invitationUiAction(async()=>{await firebase.auth().signInWithEmailAndPassword(email,password);invitationMessage='Si tu correo ya está verificado, pulsa Entrar; en caso contrario, envía la verificación.';render();});},
+  async sendInviteVerification(){return App.invitationUiAction(async()=>{if(!signedInUser)throw Error('Inicia sesión');await signedInUser.sendEmailVerification();invitationMessage='Correo de verificación enviado. Revisa también la carpeta de spam.';render();});},
+  async acceptInvite(){return App.invitationUiAction(async()=>{if(!signedInUser)throw Error('Inicia sesión');await signedInUser.reload();await invitationRequest({action:'accept',token:invitationToken});invitationToken='';history.replaceState(null,'',location.pathname+location.search);location.reload();});},
+  leaveInvite(){invitationToken='';history.replaceState(null,'',location.pathname+location.search);location.reload();},
+  async prepareProfilePhoto(file){
+    if(!file||file.size>20*1024*1024)throw Error('Elige una foto de hasta 20 MB');
+    if(!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type))throw Error('Elige una foto JPG, PNG o WebP');
+    const url=URL.createObjectURL(file),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('No se pudo abrir la foto. Prueba con JPG, PNG o WebP.'));img.src=url;});if(!img.naturalWidth||img.naturalWidth*img.naturalHeight>50000000)throw Error('La resolución de la foto es demasiado grande');const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;const size=Math.min(img.naturalWidth,img.naturalHeight);canvas.getContext('2d').drawImage(img,(img.naturalWidth-size)/2,(img.naturalHeight-size)/2,size,size,0,0,256,256);for(const quality of [.85,.7,.5,.3]){const data=canvas.toDataURL('image/jpeg',quality);if(data.length<=45000)return data;}throw Error('No se pudo reducir la foto; elige otra');}finally{URL.revokeObjectURL(url);}
+  },
+  async selectProfilePhoto(input){const file=input.files?.[0];if(!file)return;const form=document.getElementById('mName'),photo=await App.prepareProfilePhoto(file);if(document.getElementById('mName')!==form)return;profileDraftPhoto=photo;document.getElementById('profilePhotoPreview').innerHTML=`<span class="avatar" style="width:64px;height:64px"><img src="${photo}" alt="Vista previa de tu foto"></span>`;},
+  removeProfilePhoto(){profileDraftPhoto=null;const file=document.getElementById('profilePhotoFile');if(file)file.value='';document.getElementById('profilePhotoPreview').textContent='Sin foto';},
   openMemberForm(id){ modalMemberForm(id); },
   pickColor(el){ document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('sel')); el.classList.add('sel'); },
   async saveMember(id){
@@ -2696,8 +2754,9 @@ window.App = {
     if(!name){ toast('Ponle un nombre'); return; }
     const colorEl = document.querySelector('.swatch.sel');
     const data = { name, color: colorEl?colorEl.dataset.color:MEMBER_COLORS[state.members.length%MEMBER_COLORS.length] };
-    if(id){ await Data.set('members', id, data, true); }
-    else { await Data.add('members', data,operationMeta('save-member')); }
+    if(!id)throw Error('Usa Invitar integrante para crear un acceso');
+    const token=await signedInUser.getIdToken(),response=await fetch('/api/profile',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({...data,memberId:id,photoData:profileDraftPhoto})}),result=await response.json();
+    if(!response.ok)throw Error(result.error||'No se pudo guardar el perfil');
     closeModal(); toast('Miembro guardado'); render();
   },
   openItemForm(id, cat){ modalItemForm(id, cat||INVENTORY_CATS[0]); },
@@ -3323,7 +3382,7 @@ Object.assign(App,{
  async signOut(){await firebase.auth().signOut();},
  exportLocalBackup(){const backup=loadLocal();if(!backup){toast('No hay respaldo en este dispositivo');return;}downloadFile('respaldo-anterior-casa.json',JSON.stringify(backup,null,2));},
  async confirmDeleteReminder(id){if(confirm('¿Eliminar este recordatorio?')){await Data.del('reminders',id);closeModal();toast('Recordatorio eliminado');}},
- async reactivateMember(id){if(accountRole!=='admin')throw Error('Solo el administrador reactiva integrantes');await Data.set('members',id,{active:true},true);toast('Integrante reactivado');},
+ async reactivateMember(id){if(state.members.find(m=>m.id===id)?.invitationPending)throw Error('Primero debe aceptar su invitación');if(accountRole!=='admin')throw Error('Solo el administrador reactiva integrantes');await Data.set('members',id,{active:true},true);toast('Integrante reactivado');},
  async confirmDeleteMember(id){
   if(accountRole!=='admin')throw Error('Solo el administrador desactiva integrantes');
   if(!confirm('¿Desactivar este integrante? Su historial se conserva.'))return;
@@ -3525,7 +3584,7 @@ Object.assign(App,{
 // Each device serializes commands and keeps the form operation ID on retry.
 let commandPending=false;
 for(const [name,fn] of Object.entries(App)){
- if(name==='prepareTicketPhoto'||(fn.constructor.name!=='AsyncFunction'&&!name.startsWith('confirmDelete')))continue;
+ if(['prepareTicketPhoto','prepareProfilePhoto','invitationUiAction'].includes(name)||(fn.constructor.name!=='AsyncFunction'&&!name.startsWith('confirmDelete')))continue;
  App[name]=async function(...args){
   if(commandPending)return;commandPending=true;
   try{return await fn.apply(App,args);}catch(e){console.error(name,e);toast(e.message||'No se pudo guardar. Revisa la conexión y vuelve a intentar.');}finally{commandPending=false;render();}

@@ -1,0 +1,8 @@
+const {authorize,services,body,fail}=require('../server/firebase');const I=require('../server/invitations');
+module.exports=async(req,res)=>{res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Método no permitido'});try{if(Number(req.headers['content-length']||0)>4096)return res.status(413).json({error:'Solicitud demasiado grande'});const input=body(req);let result;
+ if(input.action==='info')result=await I.invitationInfo(services().db,input.token);
+ else if(input.action==='accept'){
+  const bearer=/^Bearer (\S+)$/.exec(req.headers.authorization||'');if(!bearer)return res.status(401).json({error:'Inicia sesión'});const {auth,db}=services();let identity;try{identity=await auth.verifyIdToken(bearer[1],true);}catch{return res.status(401).json({error:'Sesión inválida o vencida'});}result=await I.acceptInvitation(db,identity,input.token);
+ }else{const {uid,db}=await authorize(req,true);if(input.action==='create'){let existing;try{existing=await services().auth.getUserByEmail(I.normalizeEmail(input.email));}catch(e){if(e.code!=='auth/user-not-found')throw e;}if(existing&&(await db.doc('access/'+existing.uid).get()).exists)return res.status(409).json({error:'Ese correo ya tiene un acceso vinculado. No crees otro perfil.'});result=await I.createInvitation(db,uid,input);}else if(input.action==='revoke')result=await I.revokeInvitation(db,uid,input.id);else if(input.action==='list')result=await I.listInvitations(db,uid);else return res.status(400).json({error:'Acción inválida'});}
+ return res.status(200).json(result);
+ }catch(e){return fail(res,e);}};
