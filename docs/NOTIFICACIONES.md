@@ -14,8 +14,8 @@ Vercel ejecuta `/api/push-cron` diariamente a las 15:00 UTC: alrededor de las 9:
 
 Se envía como máximo un resumen por dispositivo y fecha de México cuando existan pendientes elegibles:
 
-- Servicios con vencimiento hoy, mañana o en los siete días anteriores, solo para sus participantes. Los recibos confirmados completamente pagados se omiten. Las cuotas de renta existentes y sus participantes no se modifican.
-- Recordatorios sin completar con la misma ventana de vencimiento. Los recordatorios existentes son de la casa; si un documento tiene `memberId`, se restringe a esa persona.
+- Servicios exactamente tres días y un día antes de su vencimiento, solo para sus participantes. Los recibos confirmados completamente pagados se omiten. Las cuotas de renta existentes y sus participantes no se modifican.
+- Recordatorios sin completar con vencimiento hoy, mañana o en los siete días anteriores. Los recordatorios existentes son de la casa; si un documento tiene `memberId`, se restringe a esa persona.
 - Productos con poco stock o agotados, si el usuario activa esta categoría.
 
 No consulta préstamos privados ni envía sus datos. La notificación muestra texto general; los importes, nombres y detalles se consultan en la app autenticada, con información actualizada. Un aviso no registra gastos ni pagos.
