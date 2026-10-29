@@ -566,6 +566,8 @@
     *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;}
   }
 
+  /* Keep the action explanations available on phones as well. */
+  .home-board .quick-action small{display:block;line-height:1.4;}
 </style>
 <script>
 /* Tema de apariencia (color de acento + claro/oscuro/automático). Se aplica
@@ -1105,10 +1107,10 @@ function pageDashboard(){
         <section class="home-stat"><div class="home-stat-icon">${icon('wallet')}</div><div class="home-stat-label">Saldo compartido</div><div class="home-stat-value">${bal&&me?fmtMoney(Math.abs(myBalance)):'—'}</div><button class="home-text-link" onclick="App.openHomeBalances()">${!me?'Vinculación pendiente':myBalance<0?'Te toca aportar':myBalance>0?'Tienes por recibir':'Estás al parejo'} ${icon('chevRight')}</button><small>Acumulado entre integrantes</small></section>
       </div>
       <div class="quick-actions">
-        <button class="quick-action" onclick="App.openMovement('compra')"><span class="qicon">${icon('plus')}</span><div><b>Registrar compra</b><small>Lo que llega a casa</small></div></button>
-        <button class="quick-action" onclick="App.openMovement('consumo')"><span class="qicon">${icon('basket')}</span><div><b>Registrar consumo</b><small>Lo que se usó</small></div></button>
-        <button class="quick-action" onclick="App.openTicketScan()"><span class="qicon">${icon('cart')}</span><div><b>Escanear ticket</b><small>Carga automática</small></div></button>
-        <button class="quick-action" onclick="App.openTicket()"><span class="qicon">${icon('cart')}</span><div><b>Agregar compra</b><small>Con o sin ticket</small></div></button>
+        <button class="quick-action" onclick="App.openMovement('compra')"><span class="qicon">${icon('plus')}</span><div><b>Compré un artículo</b><small>Suma existencias. Ej. un paquete de papel.</small></div></button>
+        <button class="quick-action" onclick="App.openMovement('consumo')"><span class="qicon">${icon('basket')}</span><div><b>Usé un producto</b><small>Resta existencias. Ej. saqué un rollo.</small></div></button>
+        <button class="quick-action" onclick="App.openTicketScan()"><span class="qicon">${icon('cart')}</span><div><b>Escanear ticket</b><small>Lee una foto; revisa productos y precios.</small></div></button>
+        <button class="quick-action" onclick="App.openTicket()"><span class="qicon">${icon('cart')}</span><div><b>Capturar compra</b><small>Anota uno o varios productos, con o sin ticket.</small></div></button>
       </div>
       <section class="panel"><div class="panel-header"><div><div class="panel-title">${icon('cycle')} Cómo van los gastos</div><div class="page-sub home-chart-note">Compras y recibos por ciclo · últimos 6</div></div></div><div class="panel-body"><div class="chart-wrap home-trend-chart"><canvas id="chartTrend" role="img" aria-label="Gasto comprometido por ciclo en pesos"></canvas></div><details class="home-chart-data"><summary>Ver valores de la gráfica</summary>${allCycleKeys().slice(-6).map(k=>'<p>'+esc(cap(cycleLabel(k)))+' · '+fmtMoney(computeCycleStats(k).total)+'</p>').join('')}</details></div></section>
       <section class="panel"><div class="panel-header"><div class="panel-title">${icon('wallet')} Presupuesto del ciclo</div>${budget>0?'<span class="home-budget-percent">'+Math.round(budgetPct)+'%</span>':''}</div><div class="panel-body">${budget>0?`<div class="home-budget-line"><span>${fmtMoney(stats.total)} de ${fmtMoney(budget)}</span><strong>${stats.total>budget?'Excedido '+fmtMoney(stats.total-budget):'Quedan '+fmtMoney(budget-stats.total)}</strong></div><div class="progress" role="progressbar" aria-label="Presupuesto utilizado" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${budgetPct}"><span style="width:${budgetPct}%;background:${budgetPct>=100?'var(--bad)':budgetPct>=80?'var(--warn)':'var(--accent)'}"></span></div>`:'<p class="page-sub">Define un presupuesto para ver cuánto queda disponible.</p><button class="btn btn-sm" onclick="App.go(\'config\')">Definir presupuesto</button>'}</div></section>
@@ -2380,7 +2382,7 @@ function modalTicket(prefillItemIds, scannedLines, scanMeta){
     rowsHtml = ticketRowHtml(items, '__free__', null, null);
   }
   openModal(`
-    <div class="modal-header"><h3>Agregar compra</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
+    <div class="modal-header"><h3>Capturar compra</h3><button class="btn btn-ghost btn-icon" onclick="App.closeModal()">${icon('x')}</button></div>
     <div class="modal-body">
       ${scannedLines && scannedLines.length ? `<div class="page-sub" style="margin:-4px 0 2px;">Revisa los productos y sus importes. Todo empieza como gasto grupal; marca solo los productos individuales.</div>` : ''}
       <div class="field"><label>Concepto del ticket (opcional)</label><input id="tkConcept" placeholder="Ej. Carne asada del sábado, Fiesta de cumpleaños… — déjalo vacío si es el súper de siempre"></div>
