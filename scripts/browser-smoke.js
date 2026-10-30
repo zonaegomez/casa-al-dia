@@ -161,13 +161,14 @@ assert.equal(await page.locator('.settlement-alternative').count(),0);
   await invitePage.goto('http://127.0.0.1:'+server.address().port+'/#invite='+invitationToken);await invitePage.locator('#inviteEmail').waitFor();assert.equal(await invitePage.locator('#loginEmail').count(),0);
   await invitePage.evaluate(()=>{window.__qa.passwordUser({uid:'wrong-email',email:'other@example.test',reload:async()=>{},getIdToken:async()=>'qa-token'});window.__qa.render();});
   await invitePage.route('**/api/invitations',r=>r.fulfill({status:403,json:{error:'Inicia sesión con el correo al que se dirigió la invitación'}}));await invitePage.getByRole('button',{name:'Ya verifiqué mi correo · Entrar',exact:true}).click();await invitePage.getByText('Inicia sesión con el correo al que se dirigió la invitación',{exact:true}).waitFor();assert.equal(await invitePage.locator('.sidebar .nav-item').count(),0);await invitePage.close();
+  assert.ok(await page.locator('[data-casa-logo="house-check"]').count()>0);
   const originalUa=await page.evaluate(()=>navigator.userAgent);
   for(const [ua,platform,text] of [['Mozilla/5.0 (Linux; Android 14) Chrome/130','android','Abre Casa al Día en Chrome.'],['Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)','ios','Abre Casa al Día en Safari.'],[originalUa,'desktop','Abre Casa al Día en Chrome o Edge.']]){
    await page.evaluate(ua=>{Object.defineProperty(navigator,'userAgent',{configurable:true,value:ua});App.installPwa();},ua);
    assert.equal(await page.locator('#installPlatform').inputValue(),platform);assert.ok((await page.locator('#modalRoot').innerText()).includes(text));
   }
   await page.locator('#installPlatform').selectOption('android');assert.ok((await page.locator('#modalRoot').innerText()).includes('Abre Casa al Día en Chrome.'));await page.evaluate(()=>App.closeModal());
-  assert.equal(await page.locator('link[rel="icon"][sizes="32x32"]').getAttribute('href'),'/icons/icon-32.png');
+  assert.equal(await page.locator('link[rel="icon"][sizes="32x32"]').getAttribute('href'),'/icons/icon-32.png?v=house-check-1');
   // Real local service worker and IndexedDB; OS permission/display and transport are simulated. No production push messages.
   await browserContext.grantPermissions(['notifications']);
   const publicKey=require('web-push').generateVAPIDKeys().publicKey;let pushEnabled=false,pushPosts=[];

@@ -107,7 +107,7 @@
   .brand{display:flex; align-items:center; gap:11px; padding:2px 8px 10px;}
   .brand-mark{
     width:36px; height:36px; border-radius:12px; flex:none;
-    background:linear-gradient(150deg, var(--accent), var(--accent-strong));
+    background:var(--accent);
     box-shadow:var(--shadow-md), inset 0 1px 0 rgba(255,255,255,.18);
     display:flex; align-items:center; justify-content:center; color:var(--accent-ink);
   }
@@ -612,11 +612,11 @@ window.CASA_THEME_KEY = 'casa-theme-v1';
   if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{ if(window.casaTheme.mode==='auto') window.applyTheme(); });
 })();
 </script>
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png">
-<link rel="shortcut icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png?v=house-check-1">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png?v=house-check-1">
+<link rel="shortcut icon" href="/favicon.ico?v=house-check-1">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<link rel="apple-touch-icon" href="/icons/icon-180.png?v=house-check-1">
 <meta name="theme-color" content="#6258E8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 </head>
@@ -884,7 +884,7 @@ function operationMeta(kind){return {kind,opId:state.formOperationId||uid()};}
 function renderAccess(){
  document.getElementById('sidebar').innerHTML='';document.getElementById('mobileNav').innerHTML='';document.getElementById('mobileTopbar').innerHTML='';
  if(invitationToken){renderInvitationAccess();return;}
- document.getElementById('main').innerHTML=`<div class="panel" style="max-width:440px;margin:60px auto"><div class="panel-body"><h1>Casa al Día</h1><p>${esc(accessMessage||'Ingresa con tu cuenta autorizada para esta casa.')}</p>
+ document.getElementById('main').innerHTML=`<div class="panel" style="max-width:440px;margin:60px auto"><div class="panel-body"><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div class="brand-mark">${brandLogo()}</div><h1 style="margin:0">Casa al Día</h1></div><p>${esc(accessMessage||'Ingresa con tu cuenta autorizada para esta casa.')}</p>
  ${signedInUser?`<p>UID: ${esc(signedInUser.uid)}</p><button class="btn" onclick="App.signOut()">Cerrar sesión</button>`:`<div class="field"><label>Correo</label><input id="loginEmail" type="email" autocomplete="username"></div><div class="field"><label>Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password"></div><button class="btn btn-primary" onclick="App.login()">Entrar</button>`}
  <p class="page-sub">${navigator.onLine?'':'Sin conexión. Los cambios están bloqueados hasta sincronizar.'}</p><button class="btn btn-ghost" onclick="App.exportLocalBackup()">Descargar respaldo anterior de este dispositivo</button></div></div>`;
 }
@@ -1035,12 +1035,13 @@ function openReminderCount(){
   return manual + bills + stock;
 }
 
+function brandLogo(){return '<svg data-casa-logo="house-check" viewBox="0 0 100 100" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M24 44L50 22L76 44V76H24Z"/><path d="M38 52L47 61L63 44"/></svg>';}
 function renderSidebar(){
   const el = document.getElementById('sidebar');
   const m = currentMember();
   el.innerHTML = `
     <div class="brand">
-      <div class="brand-mark">${icon('basket')}</div>
+      <div class="brand-mark">${brandLogo()}</div>
       <div>
         <div class="brand-name">${esc(state.settings.householdName||'Mi Casa')}</div>
         <div class="brand-sub">Casa al día</div>
@@ -1080,7 +1081,7 @@ function renderMobileTopbar(){
   const m = currentMember();
   el.innerHTML = `
     <div class="brand">
-      <div class="brand-mark">${icon('basket')}</div>
+      <div class="brand-mark">${brandLogo()}</div>
       <div class="brand-name">${esc(state.settings.householdName||'Mi Casa')}</div>
     </div>
     <button class="member-switch" onclick="App.openAccount()">
